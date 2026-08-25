@@ -1,4 +1,5 @@
 import { Dinero } from "./dinero";
+import { EstadoCuota } from "./estado-cuota";
 
 export class Cuota {
 
@@ -6,26 +7,28 @@ export class Cuota {
 
         public readonly numero: number,
 
+        public readonly monto: Dinero,
+
         public readonly capital: Dinero,
 
         public readonly interes: Dinero,
 
         public readonly fechaVencimiento: Date,
-        //String para empezar, podria cambiarse a Enum 
-        public estado: string = "pendiente"
+        
+        public estado: EstadoCuota = EstadoCuota.PENDIENTE
 
     ) {}
 
     public marcarPagada(): void {
-        this.estado = "pagada";
+        this.estado = EstadoCuota.PAGADA;
     }
 
     public estaPendiente(): boolean {
-        return this.estado === "pendiente";
+        return this.estado === EstadoCuota.PENDIENTE;
     }
 
     public estaPagada(): boolean {
-        return this.estado === "pagada";
+        return this.estado === EstadoCuota.PAGADA;
     }
 
 }

@@ -1,6 +1,9 @@
 import { Dinero } from "./dinero";
+import { EstadoCredito } from "./estado-credito";
 
 export class Credito {
+
+    private estado: EstadoCredito;
 
     constructor(
 
@@ -11,12 +14,16 @@ export class Credito {
         public saldoCapital: Dinero,
 
         public readonly tasaAnual: number,
-        //lo cambiaremos más adelante, pero ahorita solo es para el E4... so it´s okay
-        public estado: string
+        
+    ) {
+        this.estado = EstadoCredito.VIGENTE;
+    }
 
-    ) {}
+    public obtenerEstado(): EstadoCredito {
+        return this.estado;
+    }
 
-    public actualizarEstado(nuevoEstado: string): void {
+    public actualizarEstado(nuevoEstado: EstadoCredito): void {
         this.estado = nuevoEstado;
     }
 
@@ -25,10 +32,10 @@ export class Credito {
     }
 
     public estaCancelado(): boolean {
-        return this.estado === "cancelado";
+        return this.estado === EstadoCredito.CANCELADO;
     }
 
     public estaEnMora(): boolean {
-        return this.estado === "en_mora";
+        return this.estado === EstadoCredito.EN_MORA;
     }
 }

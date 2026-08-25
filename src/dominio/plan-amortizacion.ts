@@ -3,21 +3,23 @@ import { Cuota } from "./cuota";
 import { Pago } from "./pago";
 import { AplicacionPago } from "./aplicacion-pago";
 import { Dinero } from "./dinero";
+import { EstrategiaCalculo } from "../estrategias/estrategia-calculo";
 
 export class PlanAmortizacion {
 
     private cuotas: Cuota[] = [];
 
     constructor(
-        private readonly credito: Credito
+
+        private readonly credito: Credito,
+
+        private readonly estrategia: EstrategiaCalculo
+
     ) {}
 
     public generarPlan(): Cuota[] {
-
-        // PENDIENTE: Implementar algoritmo francés (6.4)
-
-        return this.cuotas;
-
+        this.cuotas = this.estrategia.generarPlan(this.credito);
+        return this.obtenerCuotas();
     }
 
     public aplicarPago(pago: Pago): AplicacionPago {
