@@ -9,6 +9,7 @@ import { PrelacionPago } from "./servicios/prelacion-pago";
 import { Cartera } from "./servicios/cartera";
 
 import { PosicionCartera } from "./dominio/posicion-cartera";
+import { RubrosAdeudados } from "./dominio/rubros-adeudados";
 import { NombreEstado } from "./dominio/nombre-estado";
 import { PoliticaCredito, BaseConteo } from "./dominio/politica-credito";
 
@@ -119,19 +120,20 @@ function imprimirEscenario(nombre: string, pago: number) {
 
     const prelacion = new PrelacionPago();
 
-    const resultado = prelacion.aplicar(
+    // Rubros de la cuota 2 vencida hace 15 dias (seccion 6.6.1).
+    const deuda = new RubrosAdeudados(
 
-        Dinero.desde(pago),
+        Dinero.desde(0),      //gastos
 
-        Dinero.desde(0),
+        Dinero.desde(7.26),   //interes moratorio
 
-        Dinero.desde(7.26),
+        Dinero.desde(278.86), //interes corriente
 
-        Dinero.desde(278.86),
-
-        Dinero.desde(725.76)
+        Dinero.desde(725.76)  //capital
 
     );
+
+    const resultado = prelacion.aplicar(Dinero.desde(pago), deuda);
 
     console.log("\n" + nombre);
 
