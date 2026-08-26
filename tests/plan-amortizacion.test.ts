@@ -5,12 +5,27 @@ import { Dinero } from "../src/dominio/dinero";
 import { Cuota } from "../src/dominio/cuota";
 import { PlanAmortizacion } from "../src/dominio/plan-amortizacion";
 import { CalculoFrances } from "../src/estrategias/calculo-frances";
+import { PoliticaCredito, BaseConteo } from "../src/dominio/politica-credito";
+import { RelojFijo } from "../src/adaptadores/reloj-fijo";
 
 // Caso de referencia obligatorio (enunciado 6.4.1):
 // P = Q10,000.00 · TNA 36% nominal -> i = 3% mensual · n = 12 cuotas.
 const MONTO = 10000;
 const TASA_ANUAL = 0.36;
 const PLAZO_MESES = 12;
+
+const POLITICA = new PoliticaCredito(
+    "POL-2026-01",
+    TASA_ANUAL,
+    0.24,
+    BaseConteo.ACTUAL_360,
+    "Comite de Credito",
+    new Date(2026, 0, 1)
+);
+
+// Reloj fijo: la fecha de corte es un dato, no el dia en que se corre
+// la prueba. Sin esto, las fechas del plan cambiarian cada dia.
+const RELOJ = new RelojFijo(new Date(2026, 0, 15));
 
 // Tabla de la seccion 6.4.1, celda por celda.
 // [numero, cuota, interes, amortizacion, saldoFinal]
@@ -36,8 +51,9 @@ function generarPlanDeReferencia(): Cuota[] {
         "CR-001",
         Dinero.desde(MONTO),
         Dinero.desde(MONTO),
-        TASA_ANUAL,
-        PLAZO_MESES
+        POLITICA,
+        PLAZO_MESES,
+        RELOJ.hoy()
     );
 
     return new PlanAmortizacion(credito, new CalculoFrances()).generarPlan();
@@ -138,5 +154,62 @@ describe("Invariantes del dominio (6.10)", () => {
 
         expect(totalPagado / 100).toBe(12055.45);
         expect(totalInteres / 100).toBe(2055.45);
+    });
+});
+
+describe("El nucleo no lee la fecha del sistema (aceptacion E4)", () => {
+
+    it("Dos planes con la misma fecha de desembolso son identicos", () => {
+
+        const fechas = (plan: Cuota[]) =>
+            plan.map(c => c.fechaVencimiento.toISOString());
+
+        expect(fechas(generarPlanDeReferencia()))
+            .toEqual(fechas(generarPlanDeReferencia()));
+    });
+
+    it("La fecha de la primera cuota es la de desembolso, no la de hoy", () => {
+
+        const primera = generarPlanDeReferencia()[0];
+
+        expect(primera.fechaVencimiento.getFullYear()).toBe(2026);
+        expect(primera.fechaVencimiento.getMonth()).toBe(0);
+        expect(primera.fechaVencimiento.getDate()).toBe(15);
+    });
+
+    it("Cambiar la fecha de desembolso corre todos los vencimientos", () => {
+
+        const credito = new Credito(
+            "CR-002",
+            Dinero.desde(MONTO),
+            Dinero.desde(MONTO),
+            POLITICA,
+            PLAZO_MESES,
+            new RelojFijo(new Date(2027, 5, 1)).hoy()
+        );
+
+        const cuotas = new PlanAmortizacion(credito, new CalculoFrances())
+            .generarPlan();
+
+        expect(cuotas[0].fechaVencimiento.getFullYear()).toBe(2027);
+        expect(cuotas[0].fechaVencimiento.getMonth()).toBe(5);
+    });
+
+    it("Sumar un mes al 31 de enero da 28 de febrero, no 3 de marzo", () => {
+
+        const credito = new Credito(
+            "CR-003",
+            Dinero.desde(MONTO),
+            Dinero.desde(MONTO),
+            POLITICA,
+            3,
+            new Date(2026, 0, 31)
+        );
+
+        const cuotas = new PlanAmortizacion(credito, new CalculoFrances())
+            .generarPlan();
+
+        expect(cuotas[1].fechaVencimiento.getMonth()).toBe(1);
+        expect(cuotas[1].fechaVencimiento.getDate()).toBe(28);
     });
 });

@@ -10,6 +10,23 @@ import { Cartera } from "./servicios/cartera";
 
 import { PosicionCartera } from "./dominio/posicion-cartera";
 import { EstadoCredito } from "./dominio/estado-credito";
+import { PoliticaCredito, BaseConteo } from "./dominio/politica-credito";
+
+import { RelojSistema } from "./adaptadores/reloj-sistema";
+
+// La politica vive fuera del codigo de calculo: version, tasas, base de
+// conteo, autor y fecha de vigencia (seccion 6.3.1).
+const POLITICA = new PoliticaCredito(
+    "POL-2026-01",
+    0.36,
+    0.24,
+    BaseConteo.ACTUAL_360,
+    "Comite de Credito",
+    new Date(2026, 0, 1)
+);
+
+// El reloj se usa aqui, en la capa de aplicacion. El nucleo nunca lo toca.
+const reloj = new RelojSistema();
 
 function titulo(texto: string) {
 
@@ -24,13 +41,14 @@ function demoPlanAmortizacion() {
 
     titulo("1. PLAN DE AMORTIZACIÓN FRANCÉS");
     const MONTO = 10000;
-    const TASA_ANUAL = 0.36;
+    const TASA_ANUAL = POLITICA.tasaAnual;
     const PLAZO_MESES = 12;
 
     console.log("Caso de referencia");
     console.log(`Monto : Q${MONTO.toFixed(2)}`);
     console.log(`Tasa  : ${(TASA_ANUAL * 100).toFixed(2)}% anual`);
     console.log(`Plazo : ${PLAZO_MESES} meses`);
+    console.log(POLITICA.describir());
     console.log();
     const credito = new Credito(
         "CR-001",
@@ -39,9 +57,11 @@ function demoPlanAmortizacion() {
 
         Dinero.desde(MONTO), //Saldo inicial
 
-        TASA_ANUAL, //tasa anual
+        POLITICA, //politica vigente al otorgamiento
 
-        PLAZO_MESES //Plazo en meses
+        PLAZO_MESES, //Plazo en meses
+
+        reloj.hoy() //fecha de desembolso, inyectada desde el puerto Reloj
 
     );
 
@@ -79,7 +99,7 @@ function demoMora() {
 
     titulo("2. INTERÉS MORATORIO");
 
-    const calculadora = new CalculadoraMora();
+    const calculadora = new CalculadoraMora(POLITICA);
 
     const mora = calculadora.calcular(
 

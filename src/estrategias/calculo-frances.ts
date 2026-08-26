@@ -18,7 +18,7 @@ export class CalculoFrances implements EstrategiaCalculo {
 
         let saldo = credito.monto;
 
-        const tasaMensual = credito.tasaAnual / 12;
+        const tasaMensual = credito.politica.tasaMensual();
         const plazo = credito.plazoMeses;
 
         const cuotaFija = this.calcularCuotaFija(
@@ -27,7 +27,9 @@ export class CalculoFrances implements EstrategiaCalculo {
             plazo
         );
 
-        const fecha = new Date();
+        // La fecha entra como dato del credito. El nucleo nunca lee
+        // el reloj del sistema (criterio de aceptacion del E4).
+        let fecha = new Date(credito.fechaDesembolso);
 
         for (let numero = 1; numero <= plazo; numero++) {
 
@@ -55,10 +57,34 @@ export class CalculoFrances implements EstrategiaCalculo {
                 )
             );
 
-            fecha.setMonth(fecha.getMonth() + 1);
+            fecha = this.sumarUnMes(fecha);
         }
 
         return cuotas;
+    }
+
+    /**
+     * Suma un mes respetando el fin de mes.
+     *
+     * setMonth() por si solo desborda: al 31 de enero le suma un mes y
+     * devuelve el 3 de marzo, no el 28 de febrero. Un vencimiento mal
+     * calculado se traduce despues en dias de atraso mal contados.
+     */
+    private sumarUnMes(fecha: Date): Date {
+
+        const anio = fecha.getFullYear();
+        const mes = fecha.getMonth();
+        const dia = fecha.getDate();
+
+        // Dia 0 del mes siguiente = ultimo dia del mes destino.
+        const ultimoDiaDelMesDestino =
+            new Date(anio, mes + 2, 0).getDate();
+
+        return new Date(
+            anio,
+            mes + 1,
+            Math.min(dia, ultimoDiaDelMesDestino)
+        );
     }
 
     /**

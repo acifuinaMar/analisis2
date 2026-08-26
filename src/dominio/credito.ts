@@ -1,5 +1,6 @@
 import { Dinero } from "./dinero";
 import { EstadoCredito } from "./estado-credito";
+import { PoliticaCredito } from "./politica-credito";
 
 export class Credito {
 
@@ -13,13 +14,26 @@ export class Credito {
 
         public saldoCapital: Dinero,
 
-        // Tasa anual expresada como decimal.
-        // Ejemplo: 0.36 = 36%
-        public readonly tasaAnual: number,
-        
-        public readonly plazoMeses: number
-        
+        /**
+         * Politica vigente al momento del otorgamiento. El credito se
+         * calcula con ella aunque la politica cambie despues (6.3.1).
+         */
+        public readonly politica: PoliticaCredito,
+
+        public readonly plazoMeses: number,
+
+        /**
+         * Fecha en que se entrego el capital. De aqui salen los
+         * vencimientos del plan; el nucleo nunca la toma del sistema.
+         */
+        public readonly fechaDesembolso: Date
+
     ) {
+
+        if (!Number.isInteger(plazoMeses) || plazoMeses <= 0) {
+            throw new Error("El plazo debe ser un numero entero de meses mayor a cero.");
+        }
+
         this.estado = EstadoCredito.VIGENTE;
     }
 
