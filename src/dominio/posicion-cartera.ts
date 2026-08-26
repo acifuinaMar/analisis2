@@ -1,5 +1,5 @@
 import { Dinero } from "./dinero";
-import { EstadoCredito } from "./estado-credito";
+import { NombreEstado } from "./nombre-estado";
 
 /**
  * Foto de un credito a una fecha de corte, usada para medir la calidad
@@ -26,7 +26,7 @@ export class PosicionCartera {
 
         public readonly diasAtraso: number,
 
-        public readonly estado: EstadoCredito,
+        public readonly estado: NombreEstado,
 
         /**
          * Marca permanente de reestructuracion.
@@ -54,8 +54,8 @@ export class PosicionCartera {
      * uno cancelado tampoco tiene saldo que arriesgar.
      */
     public estaActiva(): boolean {
-        return this.estado !== EstadoCredito.INCOBRABLE
-            && this.estado !== EstadoCredito.CANCELADO;
+        return this.estado !== NombreEstado.INCOBRABLE
+            && this.estado !== NombreEstado.CANCELADO;
     }
 
     /**
@@ -78,7 +78,7 @@ export class PosicionCartera {
             this.creditoId,
             this.saldoCapital,
             this.diasAtraso,
-            EstadoCredito.INCOBRABLE,
+            NombreEstado.INCOBRABLE,
             this.marcadoReestructurado
         );
     }

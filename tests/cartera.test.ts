@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Cartera } from "../src/servicios/cartera";
 import { PosicionCartera } from "../src/dominio/posicion-cartera";
 import { Dinero } from "../src/dominio/dinero";
-import { EstadoCredito } from "../src/dominio/estado-credito";
+import { NombreEstado } from "../src/dominio/nombre-estado";
 
 /**
  * Caso de referencia obligatorio (seccion 6.8.1).
@@ -19,13 +19,13 @@ import { EstadoCredito } from "../src/dominio/estado-credito";
  */
 function carteraDeReferencia(): Cartera {
     return new Cartera([
-        new PosicionCartera("C-001", Dinero.desde(620000), 0, EstadoCredito.VIGENTE),
-        new PosicionCartera("C-002", Dinero.desde(124000), 8, EstadoCredito.EN_MORA),
-        new PosicionCartera("C-003", Dinero.desde(24000), 45, EstadoCredito.EN_MORA),
-        new PosicionCartera("C-004", Dinero.desde(18000), 75, EstadoCredito.EN_MORA),
-        new PosicionCartera("C-005", Dinero.desde(8000), 100, EstadoCredito.EN_MORA),
-        new PosicionCartera("C-006", Dinero.desde(6000), 0, EstadoCredito.VIGENTE, true),
-        new PosicionCartera("C-007", Dinero.desde(15000), 210, EstadoCredito.INCOBRABLE)
+        new PosicionCartera("C-001", Dinero.desde(620000), 0, NombreEstado.VIGENTE),
+        new PosicionCartera("C-002", Dinero.desde(124000), 8, NombreEstado.EN_MORA),
+        new PosicionCartera("C-003", Dinero.desde(24000), 45, NombreEstado.EN_MORA),
+        new PosicionCartera("C-004", Dinero.desde(18000), 75, NombreEstado.EN_MORA),
+        new PosicionCartera("C-005", Dinero.desde(8000), 100, NombreEstado.EN_MORA),
+        new PosicionCartera("C-006", Dinero.desde(6000), 0, NombreEstado.VIGENTE, true),
+        new PosicionCartera("C-007", Dinero.desde(15000), 210, NombreEstado.INCOBRABLE)
     ]);
 }
 
@@ -56,7 +56,7 @@ describe("Cartera en riesgo - los tres matices del calculo", () => {
             .obtenerPosiciones()
             .find(p => p.creditoId === "C-002")!;
 
-        expect(c002.estado).toBe(EstadoCredito.EN_MORA);
+        expect(c002.estado).toBe(NombreEstado.EN_MORA);
         expect(c002.estaEnRiesgo()).toBe(false);
     });
 
@@ -138,7 +138,7 @@ describe("Cartera en riesgo - invariantes (6.10)", () => {
     it("Una cartera donde todo es incobrable da 0% y no divide entre cero", () => {
 
         const cartera = new Cartera([
-            new PosicionCartera("C-001", Dinero.desde(1000), 200, EstadoCredito.INCOBRABLE)
+            new PosicionCartera("C-001", Dinero.desde(1000), 200, NombreEstado.INCOBRABLE)
         ]);
 
         expect(cartera.carteraActiva().esCero()).toBe(true);
@@ -157,11 +157,11 @@ describe("Cartera en riesgo - invariantes (6.10)", () => {
     it("Rechaza dias de atraso negativos o fraccionarios", () => {
 
         expect(
-            () => new PosicionCartera("X", Dinero.desde(1), -1, EstadoCredito.VIGENTE)
+            () => new PosicionCartera("X", Dinero.desde(1), -1, NombreEstado.VIGENTE)
         ).toThrow(/negativos/);
 
         expect(
-            () => new PosicionCartera("X", Dinero.desde(1), 1.5, EstadoCredito.VIGENTE)
+            () => new PosicionCartera("X", Dinero.desde(1), 1.5, NombreEstado.VIGENTE)
         ).toThrow(/entero/);
     });
 });
