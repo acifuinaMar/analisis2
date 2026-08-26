@@ -1,3 +1,5 @@
+import { addMonths } from "date-fns";
+
 import { Credito } from "../dominio/credito";
 import { Cuota } from "../dominio/cuota";
 import { Dinero } from "../dominio/dinero";
@@ -15,6 +17,10 @@ export class CalculoFrances implements EstrategiaCalculo {
     public generarPlan(credito: Credito): Cuota[] {
 
         const cuotas: Cuota[] = [];
+
+        // addMonths de date-fns respeta el fin de mes: al 31 de enero
+        // le suma un mes y devuelve el 28 de febrero, no el 3 de marzo.
+        // El enunciado prohibe usar Date nativo para aritmetica de dias.
 
         let saldo = credito.monto;
 
@@ -57,34 +63,10 @@ export class CalculoFrances implements EstrategiaCalculo {
                 )
             );
 
-            fecha = this.sumarUnMes(fecha);
+            fecha = addMonths(fecha, 1);
         }
 
         return cuotas;
-    }
-
-    /**
-     * Suma un mes respetando el fin de mes.
-     *
-     * setMonth() por si solo desborda: al 31 de enero le suma un mes y
-     * devuelve el 3 de marzo, no el 28 de febrero. Un vencimiento mal
-     * calculado se traduce despues en dias de atraso mal contados.
-     */
-    private sumarUnMes(fecha: Date): Date {
-
-        const anio = fecha.getFullYear();
-        const mes = fecha.getMonth();
-        const dia = fecha.getDate();
-
-        // Dia 0 del mes siguiente = ultimo dia del mes destino.
-        const ultimoDiaDelMesDestino =
-            new Date(anio, mes + 2, 0).getDate();
-
-        return new Date(
-            anio,
-            mes + 1,
-            Math.min(dia, ultimoDiaDelMesDestino)
-        );
     }
 
     /**
