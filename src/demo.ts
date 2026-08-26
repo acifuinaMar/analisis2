@@ -10,6 +10,9 @@ import { Cartera } from "./servicios/cartera";
 
 import { PosicionCartera } from "./dominio/posicion-cartera";
 import { RubrosAdeudados } from "./dominio/rubros-adeudados";
+import { Pago } from "./dominio/pago";
+
+import { addDays, addMonths } from "date-fns";
 import { NombreEstado } from "./dominio/nombre-estado";
 import { PoliticaCredito, BaseConteo } from "./dominio/politica-credito";
 
@@ -88,7 +91,7 @@ function demoPlanAmortizacion() {
 
             Interes: c.interes.obtenerValor().toFixed(2),
 
-            Estado: c.estado
+            Estado: c.obtenerEstado()
 
         }))
 
@@ -255,6 +258,64 @@ function imprimirReporte(nombre: string, cartera: Cartera) {
 }
 
 
+function demoRegistroDePago() {
+
+    titulo("5. REGISTRO DE PAGO (flujo completo)");
+
+    const desembolso = reloj.hoy();
+
+    const credito = new Credito(
+        "CR-002",
+        Dinero.desde(10000),
+        Dinero.desde(10000),
+        POLITICA,
+        12,
+        desembolso
+    );
+
+    const plan = new PlanAmortizacion(credito, new CalculoFrances());
+    plan.generarPlan();
+
+    // La cuota 1 ya se pago; el corte cae 15 dias despues del vencimiento
+    // de la cuota 2.
+    const cuota1 = plan.obtenerCuotas()[0];
+    cuota1.abonar(cuota1.capitalPendiente(), cuota1.interesPendiente());
+    plan.recalcularSaldo();
+
+    const fechaCorte = addDays(addMonths(desembolso, 1), 15);
+
+    // Marcacion de mora del cierre: el credito se evalua a la fecha de corte.
+    plan.actualizarEstado(fechaCorte);
+
+    console.log("Fecha de corte    : " + fechaCorte.toISOString().slice(0, 10));
+    console.log("Estado inicial    : " + credito.nombreEstado());
+    console.log("Saldo de capital  : Q" + credito.saldoCapital.obtenerValor().toFixed(2));
+    console.log("Dias de atraso    : " + plan.diasAtrasoMaximo(fechaCorte));
+
+    const aplicacion = plan.aplicarPago(
+        new Pago(Dinero.desde(1011.88), fechaCorte, "efectivo"),
+        fechaCorte
+    );
+
+    console.log("\nPago recibido     : Q1011.88");
+
+    console.table({
+        Gastos: aplicacion.gastos.obtenerValor().toFixed(2),
+        Mora: aplicacion.interesMoratorio.obtenerValor().toFixed(2),
+        InteresCorriente: aplicacion.interesCorriente.obtenerValor().toFixed(2),
+        Capital: aplicacion.capital.obtenerValor().toFixed(2),
+        Excedente: aplicacion.excedente.obtenerValor().toFixed(2)
+    });
+
+    console.log("Cuota 2           : " + plan.obtenerCuotas()[1].obtenerEstado());
+    console.log("Estado final      : " + credito.nombreEstado());
+    console.log("Saldo de capital  : Q" + credito.saldoCapital.obtenerValor().toFixed(2));
+    console.log(
+        "\nLa cuota quedo saldada y el credito regreso de EN MORA a VIGENTE."
+    );
+}
+
+
 console.clear();
 
 console.log("==============================================");
@@ -268,6 +329,8 @@ demoMora();
 demoPrelacion();
 
 demoCartera();
+
+demoRegistroDePago();
 
 console.log("\n==============================================");
 console.log(" Fin de la demostración");
