@@ -1,5 +1,16 @@
 import { Dinero } from "../dominio/dinero";
 
+/**
+ * Orden de aplicacion de un pago (seccion 6.6.2):
+ *
+ *   1. Gastos y comisiones
+ *   2. Interes moratorio
+ *   3. Interes corriente
+ *   4. Capital
+ *
+ * Cada rubro consume lo que le corresponde y pasa el remanente al siguiente.
+ * Lo que sobra al final es el excedente del cliente, que nunca se pierde.
+ */
 export class PrelacionPago {
 
     public aplicar(
@@ -10,46 +21,32 @@ export class PrelacionPago {
         capital: Dinero
     ) {
 
-        let restante = pago.obtenerValor();
+        let restante = pago;
 
-        const aplicadoGastos =
-            Math.min(restante, gastos.obtenerValor());
+        const aplicadoGastos = Dinero.minimo(restante, gastos);
+        restante = restante.restar(aplicadoGastos);
 
-        restante -= aplicadoGastos;
+        const aplicadoMoratorio = Dinero.minimo(restante, interesMoratorio);
+        restante = restante.restar(aplicadoMoratorio);
 
-        const aplicadoMoratorio =
-            Math.min(restante, interesMoratorio.obtenerValor());
+        const aplicadoInteres = Dinero.minimo(restante, interesCorriente);
+        restante = restante.restar(aplicadoInteres);
 
-        restante -= aplicadoMoratorio;
-
-        const aplicadoInteres =
-            Math.min(restante, interesCorriente.obtenerValor());
-
-        restante -= aplicadoInteres;
-
-        const aplicadoCapital =
-            Math.min(restante, capital.obtenerValor());
-
-        restante -= aplicadoCapital;
+        const aplicadoCapital = Dinero.minimo(restante, capital);
+        restante = restante.restar(aplicadoCapital);
 
         return {
 
-            gastos: Dinero.desde(aplicadoGastos),
+            gastos: aplicadoGastos,
 
-            interesMoratorio:
-                Dinero.desde(aplicadoMoratorio),
+            interesMoratorio: aplicadoMoratorio,
 
-            interesCorriente:
-                Dinero.desde(aplicadoInteres),
+            interesCorriente: aplicadoInteres,
 
-            capital:
-                Dinero.desde(aplicadoCapital),
+            capital: aplicadoCapital,
 
-            excedente:
-                Dinero.desde(restante)
+            excedente: restante
 
         };
-
     }
-
 }

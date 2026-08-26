@@ -3,58 +3,86 @@ import { Cuota } from "../dominio/cuota";
 import { Dinero } from "../dominio/dinero";
 import { EstrategiaCalculo } from "./estrategia-calculo";
 
+/**
+ * Estrategia de amortizacion francesa de cuota fija (seccion 6.4).
+ *
+ * Toda la acumulacion de saldo ocurre en Dinero (centavos enteros), por lo
+ * que el invariante "suma de amortizaciones = capital desembolsado" y
+ * "saldo final = 0.00" se cumplen por construccion, sin correcciones.
+ */
 export class CalculoFrances implements EstrategiaCalculo {
-    private redondear(valor: number): number {
-        return Number(valor.toFixed(2));
-    }
+
     public generarPlan(credito: Credito): Cuota[] {
+
         const cuotas: Cuota[] = [];
 
-        let saldo = credito.monto.obtenerValor();
+        let saldo = credito.monto;
 
         const tasaMensual = credito.tasaAnual / 12;
         const plazo = credito.plazoMeses;
 
-        // Fórmula francesa
-        const cuotaFija =
-            saldo *
-            (tasaMensual /
-                (1 - Math.pow(1 + tasaMensual, -plazo)));
+        const cuotaFija = this.calcularCuotaFija(
+            credito.monto,
+            tasaMensual,
+            plazo
+        );
 
-        let fecha = new Date();
+        const fecha = new Date();
 
         for (let numero = 1; numero <= plazo; numero++) {
 
-            let interes = this.redondear(saldo * tasaMensual);
-            let capital = this.redondear(cuotaFija - interes);
+            const interes = saldo.multiplicar(tasaMensual);
+
+            let capital = cuotaFija.restar(interes);
             let montoCuota = cuotaFija;
 
-            //Ajuste última cuota
-            if (numero=== plazo){
+            // Ajuste de cuadre obligatorio (6.4): en la ultima cuota la
+            // amortizacion es TODO el saldo restante, y la cuota se recalcula.
+            if (numero === plazo) {
                 capital = saldo;
-                montoCuota = capital + interes;
+                montoCuota = capital.sumar(interes);
             }
-            saldo = this.redondear(saldo - capital);
 
-            // Evitar errores acumulados de redondeo
-            if (numero === plazo && saldo < 0.01) {
-                saldo = 0;
-            }
+            saldo = saldo.restar(capital);
 
             cuotas.push(
-
                 new Cuota(
                     numero,
-                    Dinero.desde(montoCuota),
-                    Dinero.desde(capital),
-                    Dinero.desde(interes),
+                    montoCuota,
+                    capital,
+                    interes,
                     new Date(fecha)
                 )
-
             );
+
             fecha.setMonth(fecha.getMonth() + 1);
         }
+
         return cuotas;
     }
 
+    /**
+     *            i * (1 + i)^n
+     *  cuota = P * ---------------
+     *            (1 + i)^n - 1
+     *
+     *  Caso especial: si i = 0 la formula se indetermina, y la cuota
+     *  es simplemente P / n (seccion 6.4).
+     */
+    private calcularCuotaFija(
+        principal: Dinero,
+        tasaMensual: number,
+        plazo: number
+    ): Dinero {
+
+        if (tasaMensual === 0) {
+            return principal.dividir(plazo);
+        }
+
+        const factor =
+            tasaMensual /
+            (1 - Math.pow(1 + tasaMensual, -plazo));
+
+        return principal.multiplicar(factor);
+    }
 }
