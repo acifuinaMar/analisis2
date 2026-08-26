@@ -6,6 +6,10 @@ import { CalculoFrances } from "./estrategias/calculo-frances";
 
 import { CalculadoraMora } from "./servicios/calculadora-mora";
 import { PrelacionPago } from "./servicios/prelacion-pago";
+import { Cartera } from "./servicios/cartera";
+
+import { PosicionCartera } from "./dominio/posicion-cartera";
+import { EstadoCredito } from "./dominio/estado-credito";
 
 function titulo(texto: string) {
 
@@ -148,6 +152,87 @@ function demoPrelacion() {
 
 }
 
+function demoCartera() {
+
+    titulo("4. CARTERA EN RIESGO");
+
+    const cartera = new Cartera([
+
+        new PosicionCartera("C-001", Dinero.desde(620000), 0, EstadoCredito.VIGENTE),
+
+        new PosicionCartera("C-002", Dinero.desde(124000), 8, EstadoCredito.EN_MORA),
+
+        new PosicionCartera("C-003", Dinero.desde(24000), 45, EstadoCredito.EN_MORA),
+
+        new PosicionCartera("C-004", Dinero.desde(18000), 75, EstadoCredito.EN_MORA),
+
+        new PosicionCartera("C-005", Dinero.desde(8000), 100, EstadoCredito.EN_MORA),
+
+        new PosicionCartera("C-006", Dinero.desde(6000), 0, EstadoCredito.VIGENTE, true),
+
+        new PosicionCartera("C-007", Dinero.desde(15000), 210, EstadoCredito.INCOBRABLE)
+
+    ]);
+
+    console.table(
+
+        cartera.obtenerPosiciones().map(p => ({
+
+            Credito: p.creditoId,
+
+            Saldo: p.saldoCapital.obtenerValor().toFixed(2),
+
+            Dias: p.diasAtraso,
+
+            Reestructurado: p.marcadoReestructurado ? "Si" : "No",
+
+            Estado: p.estado,
+
+            EnRiesgo: p.estaEnRiesgo() ? "Si" : "No"
+
+        }))
+
+    );
+
+    imprimirReporte("Antes de dar de baja", cartera);
+
+    imprimirReporte(
+        "Despues de declarar incobrable C-005",
+        cartera.declararIncobrable("C-005")
+    );
+
+    console.log(
+        "\nEl indicador bajo de 7.00% a 6.06% sin haber cobrado un solo quetzal:"
+    );
+    console.log(
+        "solo se dio de baja el credito malo. Por eso nunca se reporta solo."
+    );
+
+}
+
+function imprimirReporte(nombre: string, cartera: Cartera) {
+
+    const reporte = cartera.generarReporte();
+
+    console.log("\n" + nombre);
+
+    console.table({
+
+        CarteraActiva: reporte.carteraActiva.obtenerValor().toFixed(2),
+
+        MontoEnRiesgo: reporte.montoEnRiesgo.obtenerValor().toFixed(2),
+
+        PorcentajeEnRiesgo:
+            (reporte.porcentajeEnRiesgo * 100).toFixed(2) + " %",
+
+        DadoPorIncobrable:
+            reporte.dadoPorIncobrable.obtenerValor().toFixed(2)
+
+    });
+
+}
+
+
 console.clear();
 
 console.log("==============================================");
@@ -159,6 +244,8 @@ demoPlanAmortizacion();
 demoMora();
 
 demoPrelacion();
+
+demoCartera();
 
 console.log("\n==============================================");
 console.log(" Fin de la demostración");
