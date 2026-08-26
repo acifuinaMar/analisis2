@@ -7,7 +7,8 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "demo": "tsx src/demo.ts"
   },
   "repository": {
     "type": "git",
@@ -20,6 +21,7 @@
   },
   "homepage": "https://github.com/acifuinaMar/analisis2#readme",
   "devDependencies": {
+    "tsx": "^4.23.12",
     "typescript": "^5.9.2",
     "vitest": "^4.1.11"
   }

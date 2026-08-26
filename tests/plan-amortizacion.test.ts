@@ -25,18 +25,6 @@ describe("Plan de amortización francés", () => {
         const cuotas = plan.generarPlan();
 
         expect(cuotas[0].monto.obtenerValor()).toBeCloseTo(1004.62, 2);
-        console.log(cuotas[0]);
-        console.log(cuotas[1]);
-        console.log(cuotas[2]);
-        console.log(cuotas[3]);
-        console.log(cuotas[4]);
-        console.log(cuotas[5]);
-        console.log(cuotas[6]);
-        console.log(cuotas[7]);
-        console.log(cuotas[8]);
-        console.log(cuotas[9]);
-        console.log(cuotas[10]);
-        console.log(cuotas[11]);
     });
 
 });
