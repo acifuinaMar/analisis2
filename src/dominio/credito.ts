@@ -13,7 +13,11 @@ export class Credito {
 
         public saldoCapital: Dinero,
 
+        // Tasa anual expresada como decimal.
+        // Ejemplo: 0.36 = 36%
         public readonly tasaAnual: number,
+        
+        public readonly plazoMeses: number
         
     ) {
         this.estado = EstadoCredito.VIGENTE;

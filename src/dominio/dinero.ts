@@ -80,4 +80,16 @@ export class Dinero {
     public porcentaje(porcentaje: number): Dinero {
         return new Dinero(this.valor * porcentaje);
     }
+
+    public esMayorOIgualA(otro: Dinero): boolean {
+        return this.valor >= otro.valor;
+    }
+
+    public esMenorOIgualA(otro: Dinero): boolean {
+        return this.valor <= otro.valor;
+    }
+
+    public static desde(valor: number): Dinero{
+        return new Dinero(valor);
+    }
 }
