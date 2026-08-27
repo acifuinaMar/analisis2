@@ -1,0 +1,1422 @@
+# ============================================================
+# ARCHIVO GENERADO. No editar a mano.
+# Se produce con: npm run contratos:openapi
+# Fuente: src/contratos/*.ts (esquemas Zod, nota 8.2)
+# ============================================================
+openapi: 3.0.3
+info:
+  title: Sistema de Gestion de Microcredito -- Credito Vecino, S.A.
+  version: 1.0.0
+  description: >-
+    Contrato de la API (Entregable E5, Proyecto 1). Entrega de recursos principales
+    -- Clientes, Solicitudes, Creditos, Pagos, Cierres y Cartera en riesgo -- derivada de los mismos
+    esquemas Zod.
+servers:
+  - url: /api/v1
+    description: API V1
+tags:
+  - name: Clientes
+  - name: Solicitudes
+  - name: Creditos
+  - name: Pagos
+  - name: Cierres
+  - name: Cartera en riesgo
+components:
+  schemas:
+    ErrorApi:
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: >-
+            Codigo estable, en mayusculas, para programar contra el (no traducir ni parsear
+            `mensaje`).
+          example: TRANSICION_INVALIDA
+        mensaje:
+          type: string
+          example: El credito 'CR-0001' esta en estado 'solicitado' y no admite el evento 'registrarPago'.
+        detalles:
+          type: object
+          additionalProperties:
+            nullable: true
+          description: >-
+            Contexto adicional segun el tipo de error, p. ej. la lista de campos invalidos en un
+            error de validacion.
+        instancia:
+          type: string
+          description: Identificador de la peticion (trazabilidad / logs).
+      required:
+        - codigo
+        - mensaje
+      description: Cuerpo uniforme de error. Se usa en toda respuesta 4xx/5xx de la API.
+    Cliente:
+      type: object
+      properties:
+        id:
+          type: string
+          example: CLI-0001
+        nombreCompleto:
+          type: string
+          minLength: 3
+          example: Maria Xolop
+        dpi:
+          type: string
+          pattern: ^\d{13}$
+          example: '2547896321015'
+        nit:
+          type: string
+          example: 1234567-8
+        telefono:
+          type: string
+          example: '50212345678'
+        direccion:
+          type: string
+          example: 3a. calle 4-56, zona 3, Xela
+        fechaRegistro:
+          type: string
+          format: date-time
+          example: '2026-02-15T14:30:00.000Z'
+      required:
+        - id
+        - nombreCompleto
+        - dpi
+        - telefono
+        - direccion
+        - fechaRegistro
+    CrearClienteRequest:
+      type: object
+      properties:
+        nombreCompleto:
+          type: string
+          minLength: 3
+          example: Maria Xolop
+        dpi:
+          type: string
+          pattern: ^\d{13}$
+          example: '2547896321015'
+        nit:
+          type: string
+          example: 1234567-8
+        telefono:
+          type: string
+          example: '50212345678'
+        direccion:
+          type: string
+          example: 3a. calle 4-56, zona 3, Xela
+      required:
+        - nombreCompleto
+        - dpi
+        - telefono
+        - direccion
+    Moneda:
+      type: string
+      enum:
+        - GTQ
+        - USD
+      description: Moneda del importe. El nucleo prohibe operar dos monedas distintas entre si (seccion 6.2).
+    Dinero:
+      type: object
+      properties:
+        moneda:
+          $ref: '#/components/schemas/Moneda'
+        monto:
+          type: string
+          pattern: ^\d+\.\d{2}$
+          example: '1004.62'
+      required:
+        - moneda
+        - monto
+      description: >-
+        Objeto de Valor Dinero (seccion 6.2). Se serializa como cadena decimal, nunca como number,
+        para no reintroducir en el borde HTTP el error de punto flotante que el nucleo evita
+        internamente representando centavos como entero.
+    EstadoSolicitud:
+      type: string
+      enum:
+        - solicitado
+        - aprobado
+        - rechazado
+        - anulado
+    Solicitud:
+      type: object
+      properties:
+        id:
+          type: string
+          example: SOL-0001
+        clienteId:
+          type: string
+          example: CLI-0001
+        montoSolicitado:
+          $ref: '#/components/schemas/Dinero'
+        plazoMeses:
+          type: integer
+          minimum: 3
+          maximum: 24
+          description: Plazo en meses. La institucion coloca a 3-24 meses (seccion 2).
+          example: 12
+        estado:
+          $ref: '#/components/schemas/EstadoSolicitud'
+        motivoRechazo:
+          type: string
+          description: Obligatorio cuando estado = 'rechazado'.
+        fechaSolicitud:
+          type: string
+          format: date-time
+          example: '2026-02-15T14:30:00.000Z'
+      required:
+        - id
+        - clienteId
+        - montoSolicitado
+        - plazoMeses
+        - estado
+        - fechaSolicitud
+    CrearSolicitudRequest:
+      type: object
+      properties:
+        clienteId:
+          type: string
+          example: CLI-0001
+        montoSolicitado:
+          allOf:
+            - $ref: '#/components/schemas/Dinero'
+            - description: Debe estar entre Q1,000 y Q25,000 (seccion 2).
+        plazoMeses:
+          type: integer
+          minimum: 3
+          maximum: 24
+      required:
+        - clienteId
+        - montoSolicitado
+        - plazoMeses
+    RechazarSolicitudRequest:
+      type: object
+      properties:
+        motivo:
+          type: string
+          minLength: 5
+          example: No cumple el score minimo de la politica vigente.
+      required:
+        - motivo
+    BaseConteo:
+      type: string
+      enum:
+        - '360'
+        - '365'
+      description: >-
+        Base de conteo de dias para la mora (seccion 6.3): 360 = Actual/360 (sugerida), 365 =
+        Actual/365.
+    PoliticaCredito:
+      type: object
+      properties:
+        version:
+          type: string
+          example: POL-2026-01
+        tasaAnual:
+          type: number
+          minimum: 0
+          maximum: 2
+          description: >-
+            TNA corriente en decimal (0.36 = 36% anual, seccion 6.3). Sujeta a la guarda de
+            razonabilidad del dominio: valores fuera de [0, 2] se rechazan.
+          example: 0.36
+        tasaMoratoriaAnual:
+          type: number
+          minimum: 0
+          maximum: 2
+          description: TNA moratoria en decimal (seccion 6.5).
+          example: 0.24
+        baseConteo:
+          $ref: '#/components/schemas/BaseConteo'
+        autor:
+          type: string
+          example: Comite de Credito
+        fechaVigencia:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2026-02-15'
+      required:
+        - version
+        - tasaAnual
+        - tasaMoratoriaAnual
+        - baseConteo
+        - autor
+        - fechaVigencia
+    EstadoCredito:
+      type: string
+      enum:
+        - aprobado
+        - vigente
+        - en_mora
+        - reestructurado
+        - cancelado
+        - anulado
+        - incobrable
+      description: >-
+        Estado del credito (seccion 6.7). 'solicitado' y 'rechazado' pertenecen al recurso
+        Solicitudes: un Credito solo existe a partir del desembolso.
+    TramoMora:
+      type: string
+      nullable: true
+      enum:
+        - al_dia
+        - mora_1
+        - mora_2
+        - mora_3
+        - vencido
+      description: null cuando el credito no tiene ninguna cuota vencida a la fecha de corte consultada.
+    Credito:
+      type: object
+      properties:
+        id:
+          type: string
+          example: CR-0001
+        clienteId:
+          type: string
+          example: CLI-0001
+        solicitudId:
+          type: string
+          example: SOL-0001
+        monto:
+          allOf:
+            - $ref: '#/components/schemas/Dinero'
+            - description: Capital desembolsado (P).
+        saldoCapital:
+          $ref: '#/components/schemas/Dinero'
+        plazoMeses:
+          type: integer
+          minimum: 3
+          maximum: 24
+        fechaDesembolso:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2026-02-15'
+        politica:
+          $ref: '#/components/schemas/PoliticaCredito'
+        estado:
+          $ref: '#/components/schemas/EstadoCredito'
+        reestructuradoAlgunaVez:
+          type: boolean
+          description: >-
+            Marca permanente (seccion 6.7): la reestructuracion no borra el pasado, aunque el estado
+            vuelva a 'vigente'.
+        tramoMora:
+          $ref: '#/components/schemas/TramoMora'
+        diasAtraso:
+          type: integer
+          minimum: 0
+      required:
+        - id
+        - clienteId
+        - solicitudId
+        - monto
+        - saldoCapital
+        - plazoMeses
+        - fechaDesembolso
+        - politica
+        - estado
+        - reestructuradoAlgunaVez
+        - tramoMora
+        - diasAtraso
+    DesembolsarCreditoRequest:
+      type: object
+      properties:
+        solicitudId:
+          type: string
+          example: SOL-0001
+        fechaDesembolso:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2026-02-15'
+        politicaVersion:
+          type: string
+          description: >-
+            Version de PoliticaCredito vigente a la fecha de desembolso (seccion 6.3.1): el credito
+            queda ligado a ella para siempre, aunque la politica cambie despues.
+          example: POL-2026-01
+      required:
+        - solicitudId
+        - fechaDesembolso
+        - politicaVersion
+    ReestructurarCreditoRequest:
+      type: object
+      properties:
+        nuevoPlazoMeses:
+          type: integer
+          minimum: 3
+          maximum: 24
+        nuevaPoliticaVersion:
+          type: string
+        motivo:
+          type: string
+          minLength: 5
+          example: Acuerdo de nuevas condiciones por reduccion de ingresos comprobada.
+        autorizadoPor:
+          type: string
+          example: Comite de Credito
+      required:
+        - nuevoPlazoMeses
+        - motivo
+        - autorizadoPor
+    DeclararIncobrableRequest:
+      type: object
+      properties:
+        fechaCorte:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2026-02-15'
+        autorizadoPor:
+          type: string
+          example: Gerencia de Cartera
+      required:
+        - fechaCorte
+        - autorizadoPor
+    Cuota:
+      type: object
+      properties:
+        numero:
+          type: integer
+          minimum: 1
+        monto:
+          $ref: '#/components/schemas/Dinero'
+        capital:
+          $ref: '#/components/schemas/Dinero'
+        interes:
+          $ref: '#/components/schemas/Dinero'
+        fechaVencimiento:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2026-02-15'
+        capitalPagado:
+          $ref: '#/components/schemas/Dinero'
+        interesPagado:
+          $ref: '#/components/schemas/Dinero'
+        estado:
+          type: string
+          enum:
+            - pendiente
+            - parcial
+            - pagada
+          description: >-
+            Espejo de EstadoCuota; DERIVADO de los abonos, no un campo independiente
+            (src/dominio/cuota.ts).
+      required:
+        - numero
+        - monto
+        - capital
+        - interes
+        - fechaVencimiento
+        - capitalPagado
+        - interesPagado
+        - estado
+    PlanAmortizacion:
+      type: object
+      properties:
+        creditoId:
+          type: string
+        cuotas:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cuota'
+      required:
+        - creditoId
+        - cuotas
+    AplicacionPago:
+      type: object
+      properties:
+        gastos:
+          $ref: '#/components/schemas/Dinero'
+        interesMoratorio:
+          $ref: '#/components/schemas/Dinero'
+        interesCorriente:
+          $ref: '#/components/schemas/Dinero'
+        capital:
+          $ref: '#/components/schemas/Dinero'
+        excedente:
+          $ref: '#/components/schemas/Dinero'
+        destinoExcedente:
+          type: string
+          enum:
+            - ninguno
+            - amortizacion_a_capital
+            - pago_anticipado_de_cuotas
+          description: >-
+            Politica de adelanto aplicada al excedente (seccion 6.6.5,
+            src/estrategias/politica-adelanto.ts). 'ninguno' cuando el pago no genero excedente.
+      required:
+        - gastos
+        - interesMoratorio
+        - interesCorriente
+        - capital
+        - excedente
+        - destinoExcedente
+    Pago:
+      type: object
+      properties:
+        id:
+          type: string
+          example: PAG-0001
+        creditoId:
+          type: string
+          example: CR-0001
+        monto:
+          $ref: '#/components/schemas/Dinero'
+        fecha:
+          type: string
+          format: date-time
+          example: '2026-02-15T14:30:00.000Z'
+        medioPago:
+          type: string
+          enum:
+            - efectivo
+            - transferencia
+            - deposito
+            - tarjeta
+        referencia:
+          type: string
+        claveIdempotencia:
+          type: string
+          format: uuid
+        aplicacion:
+          $ref: '#/components/schemas/AplicacionPago'
+        estadoCreditoResultante:
+          $ref: '#/components/schemas/EstadoCredito'
+        tramoMoraResultante:
+          allOf:
+            - $ref: '#/components/schemas/TramoMora'
+            - description: >-
+                Clasificacion derivada de los dias de atraso a la fecha de corte consultada. NO es
+                el estado del credito (seccion 6.7.1): se recalcula en cada consulta y puede subir o
+                bajar sin que el estado cambie.
+      required:
+        - id
+        - creditoId
+        - monto
+        - fecha
+        - medioPago
+        - claveIdempotencia
+        - aplicacion
+        - estadoCreditoResultante
+        - tramoMoraResultante
+    RegistrarPagoRequest:
+      type: object
+      properties:
+        monto:
+          $ref: '#/components/schemas/Dinero'
+        fecha:
+          type: string
+          format: date-time
+          example: '2026-02-15T14:30:00.000Z'
+        medioPago:
+          type: string
+          enum:
+            - efectivo
+            - transferencia
+            - deposito
+            - tarjeta
+        referencia:
+          type: string
+          description: Numero de boleta, voucher o comprobante externo.
+          example: DEP-458210
+        fechaCorte:
+          type: string
+          format: date-time
+          description: >-
+            Fecha de corte con la que se calcula la mora al momento de aplicar el pago (puerto
+            Reloj, seccion 7.1). El servidor NUNCA usa su propio reloj de sistema para esta
+            operacion; la recibe siempre como parametro.
+          example: '2026-02-15T14:30:00.000Z'
+      required:
+        - monto
+        - fecha
+        - medioPago
+        - fechaCorte
+      description: >-
+        Cuerpo de POST /creditos/{id}/pagos. La peticion DEBE incluir el encabezado
+        'Idempotency-Key' (ver seccion de idempotencia del documento E5); repetirla con la misma
+        clave nunca cobra dos veces (invariante 6.10).
+    CierreDiario:
+      type: object
+      properties:
+        id:
+          type: string
+          example: CIE-2026-02-15
+        tipo:
+          type: string
+          enum:
+            - diario
+        fechaCorte:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2026-02-15'
+        generadoEn:
+          type: string
+          format: date-time
+          example: '2026-02-15T14:30:00.000Z'
+        desembolsosDelDia:
+          $ref: '#/components/schemas/Dinero'
+        recuperacionesPorConcepto:
+          type: object
+          properties:
+            capital:
+              $ref: '#/components/schemas/Dinero'
+            interesCorriente:
+              $ref: '#/components/schemas/Dinero'
+            interesMoratorio:
+              $ref: '#/components/schemas/Dinero'
+            gastos:
+              $ref: '#/components/schemas/Dinero'
+          required:
+            - capital
+            - interesCorriente
+            - interesMoratorio
+            - gastos
+        devengoInteres:
+          allOf:
+            - $ref: '#/components/schemas/Dinero'
+            - description: >-
+                Interes corriente reconocido en el dia, excluyendo el que esta en suspenso por
+                superar 90 dias de atraso (seccion 6.5).
+        creditosMarcadosEnMora:
+          type: integer
+          minimum: 0
+        saldoCartera:
+          $ref: '#/components/schemas/Dinero'
+      required:
+        - id
+        - tipo
+        - fechaCorte
+        - generadoEn
+        - desembolsosDelDia
+        - recuperacionesPorConcepto
+        - devengoInteres
+        - creditosMarcadosEnMora
+        - saldoCartera
+    ReporteCartera:
+      type: object
+      properties:
+        fechaCorte:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2026-02-15'
+        carteraActiva:
+          $ref: '#/components/schemas/Dinero'
+        montoEnRiesgo:
+          $ref: '#/components/schemas/Dinero'
+        porcentajeEnRiesgo:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: >-
+            Invariante 6.10: siempre entre 0 y 1. Se expresa en decimal (0.07 = 7.00%), nunca ya
+            multiplicado por 100, para que el cliente decida el formato de presentacion.
+          example: 0.07
+        dadoPorIncobrable:
+          $ref: '#/components/schemas/Dinero'
+      required:
+        - fechaCorte
+        - carteraActiva
+        - montoEnRiesgo
+        - porcentajeEnRiesgo
+        - dadoPorIncobrable
+    CarteraPorTramo:
+      type: object
+      properties:
+        mora1:
+          $ref: '#/components/schemas/Dinero'
+        mora2:
+          $ref: '#/components/schemas/Dinero'
+        mora3:
+          $ref: '#/components/schemas/Dinero'
+        vencido:
+          $ref: '#/components/schemas/Dinero'
+      required:
+        - mora1
+        - mora2
+        - mora3
+        - vencido
+      description: >-
+        Saldo de capital de la cartera activa agrupado por TramoMora (seccion 6.5), usado en el
+        cierre mensual.
+    CierreMensual:
+      type: object
+      properties:
+        id:
+          type: string
+          example: CIE-2026-02
+        tipo:
+          type: string
+          enum:
+            - mensual
+        periodo:
+          type: string
+          pattern: ^\d{4}-\d{2}$
+          example: 2026-02
+        generadoEn:
+          type: string
+          format: date-time
+          example: '2026-02-15T14:30:00.000Z'
+        resumenDiario:
+          allOf:
+            - $ref: '#/components/schemas/Dinero'
+            - description: Suma de desembolsos y recuperaciones del periodo.
+        carteraEnRiesgo:
+          $ref: '#/components/schemas/ReporteCartera'
+        carteraEnRiesgoPorTramo:
+          $ref: '#/components/schemas/CarteraPorTramo'
+        dadoPorIncobrableEnPeriodo:
+          allOf:
+            - $ref: '#/components/schemas/Dinero'
+            - description: >-
+                Debe reportarse SIEMPRE junto al porcentaje de cartera en riesgo (seccion 6.8): de
+                lo contrario el indicador puede 'mejorar' solo por dar de baja creditos.
+        provisiones:
+          $ref: '#/components/schemas/Dinero'
+        creditosActivos:
+          type: integer
+          minimum: 0
+        vencimientosProximos30Dias:
+          $ref: '#/components/schemas/Dinero'
+      required:
+        - id
+        - tipo
+        - periodo
+        - generadoEn
+        - resumenDiario
+        - carteraEnRiesgo
+        - carteraEnRiesgoPorTramo
+        - dadoPorIncobrableEnPeriodo
+        - provisiones
+        - creditosActivos
+        - vencimientosProximos30Dias
+    GenerarCierreDiarioRequest:
+      type: object
+      properties:
+        fechaCorte:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2026-02-15'
+      required:
+        - fechaCorte
+    GenerarCierreMensualRequest:
+      type: object
+      properties:
+        periodo:
+          type: string
+          pattern: ^\d{4}-\d{2}$
+          example: 2026-02
+      required:
+        - periodo
+    PosicionCartera:
+      type: object
+      properties:
+        creditoId:
+          type: string
+          example: CR-0003
+        saldoCapital:
+          $ref: '#/components/schemas/Dinero'
+        diasAtraso:
+          type: integer
+          minimum: 0
+        tramoMora:
+          allOf:
+            - $ref: '#/components/schemas/TramoMora'
+            - description: >-
+                Clasificacion derivada de los dias de atraso a la fecha de corte consultada. NO es
+                el estado del credito (seccion 6.7.1): se recalcula en cada consulta y puede subir o
+                bajar sin que el estado cambie.
+        marcadoReestructurado:
+          type: boolean
+        enRiesgo:
+          type: boolean
+      required:
+        - creditoId
+        - saldoCapital
+        - diasAtraso
+        - tramoMora
+        - marcadoReestructurado
+        - enRiesgo
+      description: >-
+        Espejo de PosicionCartera (src/dominio/posicion-cartera.ts): la foto de un credito a la
+        fecha de corte usada para decidir si esta en riesgo.
+    ClaveIdempotencia:
+      type: string
+      format: uuid
+      description: >-
+        Identificador unico generado por el cliente para cada intento logico de pago (seccion 6.10,
+        Anexo /E5). Reintentar la misma peticion con la misma clave nunca cobra dos veces: el
+        servidor devuelve el mismo resultado que la primera vez.
+      example: 6f9e2b0a-8f0e-4a34-9a2c-9d6a0a2f7e10
+  parameters: {}
+paths:
+  /clientes:
+    post:
+      tags:
+        - Clientes
+      summary: Registrar un cliente
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearClienteRequest'
+      responses:
+        '201':
+          description: Cliente registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cliente'
+        '400':
+          description: >-
+            Peticion invalida (falla de validacion Zod o de una guarda del dominio).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /clientes/{id}:
+    get:
+      tags:
+        - Clientes
+      summary: Consultar un cliente
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        '200':
+          description: Cliente encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cliente'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /solicitudes:
+    post:
+      tags:
+        - Solicitudes
+      summary: Registrar una solicitud de credito
+      description: >-
+        Valida los limites de monto (Q1,000-Q25,000) y plazo (3-24 meses) de la seccion 2. Crea la
+        solicitud en estado 'solicitado'.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearSolicitudRequest'
+      responses:
+        '201':
+          description: Solicitud registrada en estado 'solicitado'.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Solicitud'
+        '400':
+          description: >-
+            Peticion invalida (falla de validacion Zod o de una guarda del dominio, p. ej. una tasa
+            fuera de la razonabilidad de la seccion 6.3.1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /solicitudes/{id}:
+    get:
+      tags:
+        - Solicitudes
+      summary: Consultar una solicitud
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        '200':
+          description: Solicitud encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Solicitud'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /solicitudes/{id}/aprobacion:
+    post:
+      tags:
+        - Solicitudes
+      summary: Aprobar una solicitud (evento 'Comite aprueba', tabla 6.7.1)
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        '200':
+          description: Solicitud en estado 'aprobado'.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Solicitud'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /solicitudes/{id}/rechazo:
+    post:
+      tags:
+        - Solicitudes
+      summary: Rechazar una solicitud (evento 'Comite rechaza', tabla 6.7.1)
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RechazarSolicitudRequest'
+      responses:
+        '200':
+          description: Solicitud en estado 'rechazado' (terminal).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Solicitud'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /creditos:
+    post:
+      tags:
+        - Creditos
+      summary: Desembolsar un credito a partir de una solicitud aprobada
+      description: >-
+        Evento 'Se desembolsa' (tabla 6.7.1): crea el Credito, lo liga a la PoliticaCredito vigente
+        en la fecha de desembolso (seccion 6.3.1) y genera el plan de amortizacion frances (seccion
+        6.4).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesembolsarCreditoRequest'
+      responses:
+        '201':
+          description: Credito desembolsado en estado 'vigente'.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credito'
+        '400':
+          description: >-
+            Peticion invalida (falla de validacion Zod o de una guarda del dominio, p. ej. una tasa
+            fuera de la razonabilidad de la seccion 6.3.1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /creditos/{id}:
+    get:
+      tags:
+        - Creditos
+      summary: Consultar un credito
+      description: >-
+        `tramoMora` y `diasAtraso` se calculan a la fecha de corte indicada (clasificacion derivada,
+        seccion 6.7.1); si se omite, se usa la fecha de corte del ultimo cierre.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+        - schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+            example: '2026-02-15'
+          required: false
+          name: fechaCorte
+          in: query
+      responses:
+        '200':
+          description: Credito encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credito'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /creditos/{id}/plan-amortizacion:
+    get:
+      tags:
+        - Creditos
+      summary: Consultar el plan de amortizacion de un credito
+      description: >-
+        Reproduce cuota por cuota la tabla de la seccion 6.4, incluido el ajuste de cuadre de la
+        ultima cuota.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        '200':
+          description: Plan de amortizacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanAmortizacion'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /creditos/{id}/reestructuraciones:
+    post:
+      tags:
+        - Creditos
+      summary: 'Reestructurar un credito (tabla 6.7.1: ''Acuerdo de nuevas condiciones'')'
+      description: >-
+        Solo valido con el credito en 'en_mora' (tabla 6.7.1). Deja la marca permanente
+        `reestructuradoAlgunaVez` en verdadero; esa marca nunca se borra (seccion 6.7).
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReestructurarCreditoRequest'
+      responses:
+        '200':
+          description: Credito en estado 'reestructurado' con nuevo plan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credito'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /creditos/{id}/incobrable:
+    post:
+      tags:
+        - Creditos
+      summary: Declarar incobrable un credito (baja contable, seccion 6.7)
+      description: >-
+        Solo valido si supera 120 dias de atraso sin arreglo. Es una baja CONTABLE, no un perdon: el
+        credito sale de la cartera activa (seccion 6.8) y su cobro se terceriza; no hay camino de
+        vuelta a la cartera.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeclararIncobrableRequest'
+      responses:
+        '200':
+          description: Credito en estado 'incobrable' (terminal).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credito'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /creditos/{id}/pagos:
+    post:
+      tags:
+        - Pagos
+      summary: Registrar un pago y aplicarlo segun la prelacion (seccion 6.6)
+      description: >-
+        Requiere el encabezado `Idempotency-Key`. Ver la seccion 'Idempotencia' del documento E5:
+        reintentar la misma clave para el mismo credito devuelve 200 con el pago ya existente, en
+        vez de crear uno nuevo (invariante 6.10). Un pago nunca se rechaza por ser insuficiente
+        (seccion 6.6.4): siempre se registra y se aplica hasta donde alcance.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+        - schema:
+            $ref: '#/components/schemas/ClaveIdempotencia'
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarPagoRequest'
+      responses:
+        '200':
+          description: >-
+            Reintento con una clave de idempotencia ya usada: se devuelve el pago original, sin
+            volver a cobrarlo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pago'
+        '201':
+          description: Pago registrado y aplicado por primera vez.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pago'
+        '400':
+          description: >-
+            Peticion invalida (falla de validacion Zod o de una guarda del dominio, p. ej. una tasa
+            fuera de la razonabilidad de la seccion 6.3.1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /pagos/{id}:
+    get:
+      tags:
+        - Pagos
+      summary: Consultar un pago y su desglose de aplicacion
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        '200':
+          description: Pago encontrado, con el desglose completo por rubro (seccion 6.6.1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pago'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /cierres/diarios:
+    post:
+      tags:
+        - Cierres
+      summary: Generar el cierre diario (seccion 6.9)
+      description: >-
+        Idempotente: reejecutar el cierre de la misma `fechaCorte` devuelve el mismo resultado y no
+        duplica movimientos en el mayor.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerarCierreDiarioRequest'
+      responses:
+        '201':
+          description: Cierre diario generado (o el ya existente para esa fecha de corte).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CierreDiario'
+        '400':
+          description: >-
+            Peticion invalida (falla de validacion Zod o de una guarda del dominio, p. ej. una tasa
+            fuera de la razonabilidad de la seccion 6.3.1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /cierres/mensuales:
+    post:
+      tags:
+        - Cierres
+      summary: Generar el cierre mensual (seccion 6.9)
+      description: >-
+        Consolida los cierres diarios del periodo y agrega cartera en riesgo por tramo, provisiones
+        y lo dado por incobrable (seccion 6.8): ambas cifras siempre juntas.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerarCierreMensualRequest'
+      responses:
+        '201':
+          description: Cierre mensual generado (o el ya existente para ese periodo).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CierreMensual'
+        '400':
+          description: >-
+            Peticion invalida (falla de validacion Zod o de una guarda del dominio, p. ej. una tasa
+            fuera de la razonabilidad de la seccion 6.3.1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /cierres/{id}:
+    get:
+      tags:
+        - Cierres
+      summary: Consultar un cierre (diario o mensual)
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        '200':
+          description: Cierre encontrado.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/CierreDiario'
+                  - $ref: '#/components/schemas/CierreMensual'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /cartera/riesgo:
+    get:
+      tags:
+        - Cartera en riesgo
+      summary: Consultar la cartera en riesgo (seccion 6.8)
+      description: >-
+        El porcentaje SIEMPRE viene acompanado de `dadoPorIncobrable` en el mismo objeto: el
+        enunciado prohibe reportarlo solo, porque el indicador puede 'mejorar' sin haber cobrado
+        nada si se declaran incobrables creditos malos.
+      parameters:
+        - schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+            example: '2026-02-15'
+          required: true
+          name: fechaCorte
+          in: query
+      responses:
+        '200':
+          description: Reporte de cartera en riesgo a la fecha de corte.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReporteCartera'
+        '400':
+          description: >-
+            Peticion invalida (falla de validacion Zod o de una guarda del dominio, p. ej. una tasa
+            fuera de la razonabilidad de la seccion 6.3.1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+  /cartera/posiciones:
+    get:
+      tags:
+        - Cartera en riesgo
+      summary: Listar las posiciones de cartera a una fecha de corte
+      description: >-
+        Detalle credito por credito detras del agregado de /cartera/riesgo; equivalente a la tabla
+        del ejemplo resuelto de la seccion 6.8.1.
+      parameters:
+        - schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+            example: '2026-02-15'
+          required: true
+          name: fechaCorte
+          in: query
+      responses:
+        '200':
+          description: Posiciones de cartera a la fecha de corte.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PosicionCartera'
+        '400':
+          description: >-
+            Peticion invalida (falla de validacion Zod o de una guarda del dominio, p. ej. una tasa
+            fuera de la razonabilidad de la seccion 6.3.1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '404':
+          description: El recurso solicitado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
+        '409':
+          description: >-
+            Conflicto de estado: la operacion no es valida para el estado actual del recurso (patron
+            State, seccion 6.7 -- p. ej. registrar un pago sobre un credito 'solicitado').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApi'
