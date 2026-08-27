@@ -96,8 +96,11 @@ class EstadoSolicitud{
 }
 
 class EstadoCredito{
-    +id : UUID
-    +nombre : String
+    <<State>>
+    +aprobar()
+    +desembolsar()
+    +registrarPago()
+    +evaluarAlCorte()
 }
 
 class EstadoPago{
@@ -146,7 +149,7 @@ class ActividadEconomica catalog
 class TipoTelefono catalog
 class MetodoPago catalog
 class EstadoSolicitud catalog
-class EstadoCredito catalog
+class EstadoCredito
 class EstadoPago catalog
 class EstadoCuota catalog
 class Rol catalog
@@ -180,11 +183,6 @@ class EstadoSolicitud{
     +nombre : String
 }
 
-class EstadoCredito{
-    +id : UUID
-    +nombre : String
-}
-
 %%==================================================
 %% SEGURIDAD
 %%==================================================
@@ -213,6 +211,13 @@ class Credito{
     +id : UUID
     +numero : NumeroCredito
     +fechaDesembolso : Date
+
+    +saldoCapital : Money
+    +tasaAnual : Decimal
+    +plazoMeses : Integer
+
+    +registrarPago()
+    +evaluarEstado()
 }
 
 class PlanAmortizacion{
@@ -222,7 +227,7 @@ class PlanAmortizacion{
     +vigente : Boolean
     +diasAtraso : Integer
 
-    +generar()
+    +generarPlan()
     +registrarPago()
     +recalcular()
     +calcularSaldo()
@@ -243,7 +248,7 @@ class PoliticaAmortizacion{
     +generarPlan()
 }
 
-class SistemaFrances{
+class CalculoFrances{
     +generarPlan()
 }
 
@@ -263,15 +268,17 @@ SolicitudCredito "1" --> "0..1" Credito : genera
 
 Credito --> SolicitudCredito : origen
 
-Credito --> EstadoCredito
+Credito --> EstadoCredito : estadoActual
 
 Credito *-- "1..*" PlanAmortizacion
 
 PlanAmortizacion --> PoliticaAmortizacion
 
-PoliticaAmortizacion <|.. SistemaFrances
+PoliticaAmortizacion <|.. CalculoFrances
 
 PoliticaAmortizacion <|.. SistemaAleman
+
+Pago --> PlanAmortizacion : afecta
 
 %%==================================================
 %% COLORES
@@ -284,10 +291,10 @@ class PlanAmortizacion entity
 class Usuario entity
 
 class EstadoSolicitud catalog
-class EstadoCredito catalog
+class EstadoCredito
 
 class PoliticaAmortizacion strategy
-class SistemaFrances strategy
+class CalculoFrances strategy
 class SistemaAleman strategy
 
 class Money value
@@ -379,6 +386,9 @@ class RegistroEvento{
     +entidadId : UUID
 }
 
+class PoliticaCredito{
+}
+
 %%==================================================
 %% RELACIONES
 %%==================================================
@@ -394,6 +404,8 @@ Pago --> "1..*" AplicacionPago
 Cuota --> "0..*" AplicacionPago
 
 RegistroEvento --> Usuario
+
+PlanAmortizacion --> PoliticaCredito : utiliza
 
 %%==================================================
 %% COLORES
@@ -429,7 +441,7 @@ PlanAmortizacion --> PoliticaAmortizacion : utiliza
 
 SolicitudCredito --> EstadoSolicitud
 
-Credito --> EstadoCredito
+Credito --> EstadoCredito : estadoActual
 
 Pago --> EstadoPago
 
