@@ -133,9 +133,10 @@ la revisión de código. Todo el contenido entregado fue comprendido,
 validado y puede ser explicado y defendido por el autor.
 
 ## Autores
-MARYORI ELIZABETH ACIFUINA JUAREZ
-DALILA NINETH ZACARIAS DE LEON
-HILTON ALEXANDER LÓPEZ IC
-ERIC ALEXANDER BARILLAS OROZCO
+
+- **MARYORI ELIZABETH ACIFUINA JUAREZ**
+- **DALILA NINETH ZACARIAS DE LEON**
+- **HILTON ALEXANDER LÓPEZ IC**
+- **ERIC ALEXANDER BARILLAS OROZCO**
 
 Universidad Mariano Gálvez de Guatemala, 2026.
