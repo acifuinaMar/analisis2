@@ -5,6 +5,7 @@ import { AplicacionPago } from "./aplicacion-pago";
 import { Dinero } from "./dinero";
 import { RubrosAdeudados } from "./rubros-adeudados";
 import { TransicionInvalida } from "./estados/estado-credito";
+import { CatalogoPoliticasMora } from "./politica-mora/catalogo-politicas";
 import { EstrategiaCalculo } from "../estrategias/estrategia-calculo";
 import {
     PoliticaAdelanto,
@@ -35,8 +36,16 @@ export class PlanAmortizacion {
 
         private readonly estrategia: EstrategiaCalculo,
 
+        /**
+         * La politica moratoria se resuelve por la FECHA DE OTORGAMIENTO
+         * del credito, no por la fecha de corte (CP-03): los creditos
+         * anteriores al 1/10/2026 conservan la plana del 24 %.
+         */
         private readonly calculadoraMora: CalculadoraMora =
-            new CalculadoraMora(credito.politica),
+            new CalculadoraMora(
+                CatalogoPoliticasMora.vigente()
+                    .resolver(credito.fechaDesembolso)
+            ),
 
         private readonly prelacion: PrelacionPago = new PrelacionPago(),
 

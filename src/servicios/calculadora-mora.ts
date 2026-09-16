@@ -1,35 +1,39 @@
 import { Dinero } from "../dominio/dinero";
-import { PoliticaCredito } from "../dominio/politica-credito";
+import { PoliticaMora } from "../dominio/politica-mora/politica-mora";
 
 /**
- * Calculo del interes moratorio (seccion 6.5).
+ * Motor de calculo del interes moratorio (P1 seccion 6.5).
  *
- * Se aplica EXCLUSIVAMENTE sobre el capital en mora, nunca sobre el total
- * de la cuota: el Codigo Civil de Guatemala prohibe el anatocismo, es decir,
- * que los intereses vencidos generen nuevos intereses.
+ * El Proyecto 1 recibia la TASA inyectada pero tenia la FORMULA escrita
+ * aqui dentro: capital x tasa diaria x dias. Eso alcanzaba mientras todas
+ * las politicas fueran planas.
  *
- * La tasa y la base de conteo llegan desde la politica de credito, no como
- * constantes de este archivo (seccion 6.3.1).
+ * La politica escalonada del Proyecto 2 no es otra tasa, es otra formula:
+ * una suma sobre los tramos recorridos. Por eso lo que se inyecta ahora es
+ * el calculo completo, a traves del puerto PoliticaMora.
+ *
+ * A partir de este punto el motor no vuelve a cambiar: agregar una politica
+ * nueva es escribir una implementacion nueva del puerto. La politica
+ * retroactiva se agrego despues, sin tocar este archivo.
+ *
+ * Se mantienen las dos reglas irrenunciables del dominio: el moratorio se
+ * calcula solo sobre capital en mora —el Codigo Civil prohibe el
+ * anatocismo— y cada cuota vencida se calcula por separado, con su propio
+ * capital y sus propios dias.
  */
 export class CalculadoraMora {
 
-    constructor(private readonly politica: PoliticaCredito) {}
+    constructor(private readonly politica: PoliticaMora) {}
 
     public calcular(
         capitalEnMora: Dinero,
         diasAtraso: number
     ): Dinero {
+        return this.politica.calcular(capitalEnMora, diasAtraso);
+    }
 
-        if (!Number.isInteger(diasAtraso)) {
-            throw new Error("Los dias de atraso deben ser un numero entero.");
-        }
-
-        if (diasAtraso <= 0) {
-            return Dinero.cero(capitalEnMora.obtenerMoneda());
-        }
-
-        return capitalEnMora.multiplicar(
-            this.politica.tasaMoratoriaDiaria() * diasAtraso
-        );
+    /** Version de la politica aplicada, para la trazabilidad del cierre. */
+    public versionPolitica(): string {
+        return this.politica.version;
     }
 }
