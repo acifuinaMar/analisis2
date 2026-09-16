@@ -6,6 +6,7 @@ import { Dinero } from "./dinero";
 import { RubrosAdeudados } from "./rubros-adeudados";
 import { TransicionInvalida } from "./estados/estado-credito";
 import { CatalogoPoliticasMora } from "./politica-mora/catalogo-politicas";
+import { GastoGestionCobro } from "./gasto-gestion-cobro";
 import { EstrategiaCalculo } from "../estrategias/estrategia-calculo";
 import {
     PoliticaAdelanto,
@@ -50,9 +51,17 @@ export class PlanAmortizacion {
         private readonly prelacion: PrelacionPago = new PrelacionPago(),
 
         private readonly politicaAdelanto: PoliticaAdelanto =
-            new AmortizacionACapital()
+            new AmortizacionACapital(),
+
+        private readonly gastoGestion: GastoGestionCobro =
+            new GastoGestionCobro()
 
     ) {}
+
+    /** Identifica una cuota dentro del libro de gastos de gestion. */
+    private claveDe(cuota: Cuota): string {
+        return `${this.credito.id}-${cuota.numero}`;
+    }
 
     public generarPlan(): Cuota[] {
         this.cuotas = this.estrategia.generarPlan(this.credito);
@@ -86,6 +95,11 @@ export class PlanAmortizacion {
         }
 
         const exigibles = this.cuotasExigibles(fechaCorte);
+
+        // Marcacion del cierre: genera el gasto de gestion de las cuotas
+        // que alcanzaron 31 dias. Es idempotente, asi que reejecutar el
+        // cierre del mismo dia no vuelve a cobrar la visita (CP-02).
+        this.generarGastosDeGestion(exigibles, fechaCorte);
 
         const deuda = this.calcularDeuda(exigibles, fechaCorte);
 
@@ -199,14 +213,14 @@ export class PlanAmortizacion {
             capital = capital.sumar(cuota.capitalPendiente());
         }
 
-        return new RubrosAdeudados(
-            // Los gastos por servicios efectivamente prestados los define
-            // la politica; en el caso de referencia no hay ninguno.
-            Dinero.cero(moneda),
-            moratorio,
-            corriente,
-            capital
+        const gastos = exigibles.reduce(
+            (total, cuota) => total.sumar(
+                this.gastoGestion.pendientePara(this.claveDe(cuota))
+            ),
+            Dinero.cero(moneda)
         );
+
+        return new RubrosAdeudados(gastos, moratorio, corriente, capital);
     }
 
     /**
@@ -216,10 +230,21 @@ export class PlanAmortizacion {
      */
     private imputar(exigibles: Cuota[], aplicacion: AplicacionPago): void {
 
+        let gastos = aplicacion.gastos;
         let interes = aplicacion.interesCorriente;
         let capital = aplicacion.capital;
 
         for (const cuota of exigibles) {
+
+            const clave = this.claveDe(cuota);
+
+            const aGastos = Dinero.minimo(
+                gastos,
+                this.gastoGestion.pendientePara(clave)
+            );
+
+            this.gastoGestion.abonar(clave, aGastos);
+            gastos = gastos.restar(aGastos);
 
             const aInteres = Dinero.minimo(interes, cuota.interesPendiente());
             const aCapital = Dinero.minimo(capital, cuota.capitalPendiente());
@@ -229,5 +254,68 @@ export class PlanAmortizacion {
             interes = interes.restar(aInteres);
             capital = capital.restar(aCapital);
         }
+    }
+
+    /**
+     * Genera el gasto de gestion de cobro de las cuotas que alcanzaron el
+     * dia 31. El libro de gastos garantiza que cada cuota lo genere una
+     * sola vez, sin importar cuantos cierres se ejecuten (CP-02).
+     */
+    private generarGastosDeGestion(
+        exigibles: Cuota[],
+        fechaCorte: Date
+    ): void {
+
+        for (const cuota of exigibles) {
+            this.gastoGestion.evaluarAlCorte(
+                this.claveDe(cuota),
+                cuota.diasAtraso(fechaCorte)
+            );
+        }
+    }
+
+    /**
+     * Total adeudado de las cuotas exigibles a la fecha de corte, con su
+     * desglose por rubro. Es lo que la pantalla de cobro debe mostrar
+     * antes de recibir un pago.
+     */
+    public calcularTotalAdeudado(fechaCorte: Date): RubrosAdeudados {
+
+        const exigibles = this.cuotasExigibles(fechaCorte);
+
+        this.generarGastosDeGestion(exigibles, fechaCorte);
+
+        return this.calcularDeuda(exigibles, fechaCorte);
+    }
+
+    /**
+     * Desglose de lo que adeuda UNA cuota vencida a la fecha de corte.
+     *
+     * Existe porque la mora se calcula cuota por cuota (P1 6.5) y porque
+     * el cliente necesita ver el detalle de SU cuota, no un agregado:
+     * cuanto es gasto, cuanto mora, cuanto interes y cuanto capital.
+     */
+    public deudaDeCuota(
+        numeroCuota: number,
+        fechaCorte: Date
+    ): RubrosAdeudados {
+
+        const cuota = this.cuotas.find(c => c.numero === numeroCuota);
+
+        if (!cuota) {
+            throw new Error(`La cuota ${numeroCuota} no existe en el plan.`);
+        }
+
+        if (!cuota.estaVencida(fechaCorte)) {
+            return RubrosAdeudados.ninguno();
+        }
+
+        this.generarGastosDeGestion([cuota], fechaCorte);
+
+        return this.calcularDeuda([cuota], fechaCorte);
+    }
+
+    public librodeGastos(): GastoGestionCobro {
+        return this.gastoGestion;
     }
 }
