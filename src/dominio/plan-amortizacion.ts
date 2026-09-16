@@ -144,7 +144,8 @@ export class PlanAmortizacion {
 
         this.credito.evaluarAlCorte({
             saldoEnCero: this.credito.saldoCapital.esCero(),
-            diasAtraso: this.diasAtrasoMaximo(fechaCorte)
+            diasAtraso: this.diasAtrasoMaximo(fechaCorte),
+            cuotasVencidasPendientes: this.cuotasExigibles(fechaCorte).length
         });
     }
 

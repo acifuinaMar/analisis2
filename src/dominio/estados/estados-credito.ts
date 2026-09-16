@@ -15,6 +15,16 @@ import { EstadoBase, EstadoCredito, SituacionCredito } from "./estado-credito";
 
 const clasificador = new ClasificadorTramoMora();
 
+/**
+ * Guarda de cancelacion (CP-04.1): el saldo llego a cero exacto Y no
+ * quedan cuotas vencidas pendientes. El capital puede estar en cero y
+ * seguir debiendose intereses o gastos vencidos; eso no es cancelado.
+ */
+function estaLiquidado(situacion: SituacionCredito): boolean {
+    return situacion.saldoEnCero
+        && situacion.cuotasVencidasPendientes === 0;
+}
+
 /** solicitado: aprobar o rechazar. Nunca recibir un pago (invariante 6.10). */
 export class Solicitado extends EstadoBase {
 
@@ -58,7 +68,7 @@ export class Vigente extends EstadoBase {
 
     public evaluarAlCorte(situacion: SituacionCredito): EstadoCredito {
 
-        if (situacion.saldoEnCero) {
+        if (estaLiquidado(situacion)) {
             return new Cancelado();
         }
 
@@ -88,9 +98,20 @@ export class EnMora extends EstadoBase {
         return this.evaluarAlCorte(situacion);
     }
 
+    /**
+     * CP-04.1: en_mora -> cancelado.
+     *
+     * La tabla 6.7.1 del Proyecto 1 no contemplaba esta transicion, pero
+     * el escenario C de pago de mas (6.6.5) afirma que si el excedente
+     * cancela todo el saldo el credito pasa a CANCELADO. Un credito en
+     * mora que liquida su saldo no tenia a donde ir.
+     *
+     * La guarda son las dos condiciones juntas: saldo exactamente cero Y
+     * sin cuotas vencidas pendientes.
+     */
     public evaluarAlCorte(situacion: SituacionCredito): EstadoCredito {
 
-        if (situacion.saldoEnCero) {
+        if (estaLiquidado(situacion)) {
             return new Cancelado();
         }
 
@@ -137,7 +158,7 @@ export class Reestructurado extends EstadoBase {
 
     public registrarPago(situacion: SituacionCredito): EstadoCredito {
 
-        if (situacion.saldoEnCero) {
+        if (estaLiquidado(situacion)) {
             return new Cancelado();
         }
 
