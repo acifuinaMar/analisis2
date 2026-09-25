@@ -48,9 +48,9 @@ Este repositorio reúne tanto el código fuente del dominio como toda la documen
 | **E2** | Arquitectura de información y wireframes | Terminado |
 | **E3** | Prototipo navegable de alta fidelidad | Terminado |
 | **E4** | Movilidad y experiencia de usuario | Terminado |
-| **E5** | Evaluación heurística y accesibilidad | Pendiente |
+| **E5** | Evaluación heurística y accesibilidad | Terminado |
 | **E6** | Evolución del núcleo e impacto SOLID | Terminado |
-| **E7** | Documento consolidado | Pendiente |
+| **E7** | Documento consolidado | Terminado |
 
 ---
 
