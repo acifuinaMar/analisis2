@@ -99,7 +99,7 @@ Agregar un botón **Cancelar** o **Guardar y salir** para abandonar el flujo sin
 
 Registro de pago
 
-![Registro del pago](/img/registro-pago.png)
+![Registro del pago](img/registro-pago.png)
 
 ## Problema identificado
 
@@ -133,7 +133,7 @@ Mostrar mensajes preventivos y deshabilitar el botón **Registrar pago** hasta c
 
 Reportes
 
-![Reportes gerenciales](/img/reportes-pc.png)
+![Reportes gerenciales](img/reportes-pc.png)
 
 ## Problema identificado
 
@@ -161,7 +161,7 @@ Guardar la última configuración utilizada o proporcionar accesos rápidos a lo
 
 Créditos del tramo
 
-![Créditos del tramo](/img/creditos-del-tramo-mora-2.png)
+![Créditos del tramo](img/creditos-del-tramo-mora-2.png)
 
 ## Problema identificado
 
@@ -196,7 +196,7 @@ Agregar filtros avanzados y opciones de ordenamiento.
 
 Dashboard
 
-![Dashboard gerencial](/img/dashboard-gerencial-pc.png)
+![Dashboard gerencial](img/dashboard-gerencial-pc.png)
 
 ## Problema identificado
 
@@ -224,7 +224,7 @@ Resaltar primero los indicadores críticos y reducir el protagonismo de la infor
 
 Registro de pago
 
-![Registro del pago](/img/registro-pago.png)
+![Registro del pago](img/registro-pago.png)
 
 ## Problema identificado
 
