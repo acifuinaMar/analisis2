@@ -59,7 +59,7 @@ pantallas.
 | Campo | Contenido |
 |:---|:---|
 | **Heurística** | N.º 8 — Diseño estético y minimalista |
-| **Pantalla** | Tablero gerencial (escritorio) |
+| **Pantalla** | Dashboard · Tablero gerencial (escritorio) |
 | **Persona afectada** | Lorena Aguilar, gerente |
 | **Severidad** | **1 — Cosmético** |
 
