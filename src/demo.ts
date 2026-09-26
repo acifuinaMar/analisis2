@@ -18,6 +18,8 @@ import { PoliticaCredito, BaseConteo } from "./dominio/politica-credito";
 
 import { RelojSistema } from "./adaptadores/reloj-sistema";
 
+import { POLITICA_PLANA_2024 } from "./dominio/politica-mora/catalogo-politicas";
+
 // La politica vive fuera del codigo de calculo: version, tasas, base de
 // conteo, autor y fecha de vigencia (seccion 6.3.1).
 const POLITICA = new PoliticaCredito(
@@ -103,7 +105,7 @@ function demoMora() {
 
     titulo("2. INTERÉS MORATORIO");
 
-    const calculadora = new CalculadoraMora(POLITICA);
+    const calculadora = new CalculadoraMora(POLITICA_PLANA_2024);
 
     const mora = calculadora.calcular(
 

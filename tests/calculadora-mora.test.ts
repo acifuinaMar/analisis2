@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { CalculadoraMora } from "../src/servicios/calculadora-mora";
 import { Dinero } from "../src/dominio/dinero";
+import { POLITICA_PLANA_2024 } from "../src/dominio/politica-mora/catalogo-politicas";
 import { PoliticaCredito, BaseConteo } from "../src/dominio/politica-credito";
 
 const POLITICA = new PoliticaCredito(
@@ -17,7 +18,7 @@ describe("Calculadora de mora", () => {
 
     it("Debe calcular el interés moratorio del caso de referencia", () => {
 
-        const calculadora = new CalculadoraMora(POLITICA);
+        const calculadora = new CalculadoraMora(POLITICA_PLANA_2024);
 
         const mora = calculadora.calcular(
 

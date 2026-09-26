@@ -18,6 +18,7 @@ import {
 import { CalculadoraMora } from "../src/servicios/calculadora-mora";
 import { PrelacionPago } from "../src/servicios/prelacion-pago";
 import { RelojFijo } from "../src/adaptadores/reloj-fijo";
+import { POLITICA_PLANA_2024 } from "../src/dominio/politica-mora/catalogo-politicas";
 
 const POLITICA = new PoliticaCredito(
     "POL-2026-01", 0.36, 0.24, BaseConteo.ACTUAL_360,
@@ -195,7 +196,7 @@ describe("aplicarPago - Escenario C: pago con excedente (6.6.5)", () => {
         const plan = new PlanAmortizacion(
             c,
             new CalculoFrances(),
-            new CalculadoraMora(POLITICA),
+            new CalculadoraMora(POLITICA_PLANA_2024),
             new PrelacionPago(),
             new PagoAnticipadoDeCuotas()
         );
@@ -226,7 +227,7 @@ describe("aplicarPago - mora cuota por cuota (6.5)", () => {
         const exigibles = plan.cuotasExigibles(corte);
         expect(exigibles).toHaveLength(2);
 
-        const mora = new CalculadoraMora(POLITICA);
+        const mora = new CalculadoraMora(POLITICA_PLANA_2024);
         const esperado = exigibles.reduce(
             (total, cuota) => total.sumar(
                 mora.calcular(cuota.capitalPendiente(), cuota.diasAtraso(corte))

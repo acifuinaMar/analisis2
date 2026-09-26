@@ -33,6 +33,15 @@ export interface SituacionCredito {
 
     readonly diasAtraso: number;
 
+    /**
+     * Cuotas vencidas sin saldar a la fecha de corte.
+     *
+     * Es la segunda mitad de la guarda de en_mora -> cancelado (CP-04.1):
+     * el saldo de capital puede llegar a cero y quedar todavia intereses o
+     * gastos vencidos sin pagar. Un credito asi no esta cancelado.
+     */
+    readonly cuotasVencidasPendientes: number;
+
 }
 
 /**

@@ -8,9 +8,9 @@ info:
   title: Sistema de Gestion de Microcredito -- Credito Vecino, S.A.
   version: 1.0.0
   description: >-
-    Contrato de la API (Entregable E5, Proyecto 1). Entrega de recursos principales
-    -- Clientes, Solicitudes, Creditos, Pagos, Cierres y Cartera en riesgo -- derivada de los mismos
-    esquemas Zod.
+    Contrato de la API (Entregable E5, Proyecto 1). Entrega de recursos principales -- Clientes,
+    Solicitudes, Creditos, Pagos, Cierres y Cartera en riesgo -- derivada de los mismos esquemas
+    Zod.
 servers:
   - url: /api/v1
     description: API V1
@@ -767,7 +767,8 @@ paths:
                 $ref: '#/components/schemas/Cliente'
         '400':
           description: >-
-            Peticion invalida (falla de validacion Zod o de una guarda del dominio).
+            Peticion invalida (falla de validacion Zod o de una guarda del dominio, p. ej. una tasa
+            fuera de la razonabilidad de la seccion 6.3.1).
           content:
             application/json:
               schema:

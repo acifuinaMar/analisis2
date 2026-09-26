@@ -31,8 +31,12 @@ function credito(estadoInicial = new Vigente()): Credito {
 }
 
 /** Atajo para describir la situacion con la que el estado decide. */
-function situacion(diasAtraso: number, saldoEnCero = false) {
-    return { diasAtraso, saldoEnCero };
+function situacion(
+    diasAtraso: number,
+    saldoEnCero = false,
+    cuotasVencidasPendientes = 0
+) {
+    return { diasAtraso, saldoEnCero, cuotasVencidasPendientes };
 }
 
 describe("Ciclo de vida - avance normal (tabla 6.7.1)", () => {
