@@ -1,6 +1,6 @@
 
 import { describe, expect, it } from "vitest";
-import { CASOS_RAG } from "./casosRAG";
+import { CASOS_RAG } from "../../src/rag/casosRAG";
 
 describe("Casos de evaluación del RAG", () => {
   it("contiene seis casos iniciales", () => {

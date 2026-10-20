@@ -85,6 +85,13 @@ if (!evaluacion.aceptada) {
     evaluacion.citasInvalidas
   );
 
+  if (process.env.RAG_DEBUG === "true") {
+    console.log(
+      "\n[RAG DEBUG] Respuesta original rechazada:\n",
+      respuestaGenerada
+    );
+  }
+
   respuestaFinal =
     "No puedo proporcionar una respuesta con referencias " +
     "documentales verificadas en este momento. " +
