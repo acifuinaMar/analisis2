@@ -2,6 +2,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { INSTRUCCIONES_RAG } from "./instruccionesRAG";
 import { evaluarRespuesta } from "./evaluarRespuesta";
+import { reintentarGemini } from "./reintentarGemini";
 import {
   buscarFragmentos,
   type ResultadoBusqueda,
@@ -54,7 +55,7 @@ ${fragmento.contenido}
 
   const cliente = new GoogleGenAI({ apiKey });
 
-  const resultado = await cliente.models.generateContent({
+  const resultado = await reintentarGemini(() => cliente.models.generateContent({
     model: "gemini-3.8-flash",
     contents: `
 PREGUNTA DEL USUARIO:
@@ -67,7 +68,8 @@ ${contexto}
   systemInstruction: INSTRUCCIONES_RAG,
   temperature: 0.1,
 },
-  });
+  })
+);
 
  
   const respuestaGenerada = resultado.text?.trim() ?? "";

@@ -1,30 +1,90 @@
 
 import { performance } from "node:perf_hooks";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { responderPregunta } from "./responderPregunta";
 import { cerrarPool } from "./conexionBD";
 import { CASOS_RAG } from "./casosRAG";
 import { validarCitas } from "./validarCitas";
+import { esErrorCuotaGemini } from "./esErrorCuotaGemini";
+
+type EstadoEvaluacion = "PASS" | "FAIL" | "ERROR" | "SKIPPED";
+
+interface ResultadoCaso {
+  id: string;
+  categoria: string;
+  pregunta: string;
+  estado: EstadoEvaluacion;
+  duracionMs: number;
+  fuentesRecuperadas: string[];
+  citasValidas: string[];
+  citasInvalidas: string[];
+  respuesta?: string;
+  verificaciones?: Record<string, boolean>;
+  motivo?: string;
+  error?: {
+    codigo?: string | number;
+    mensaje: string;
+  };
+}
+
+function describirError(error: unknown): {
+  codigo?: string | number;
+  mensaje: string;
+} {
+  if (typeof error !== "object" || error === null) {
+    return { mensaje: String(error) };
+  }
+
+  const detalle = error as {
+    code?: string | number;
+    status?: string | number;
+    message?: string;
+  };
+
+  return {
+    codigo: detalle.code ?? detalle.status,
+    mensaje: detalle.message ?? "Error desconocido",
+  };
+}
 
 async function ejecutarEvaluaciones(): Promise<void> {
+  const idCaso = process.env.RAG_CASO;
+
+  const casosSeleccionados = idCaso
+    ? CASOS_RAG.filter((caso) => caso.id === idCaso)
+    : CASOS_RAG;
+
+  if (casosSeleccionados.length === 0) {
+    throw new Error(
+      `No existe el caso de evaluación: ${idCaso}`
+    );
+  }
+
+  const fechaInicio = new Date().toISOString();
+  const resultados: ResultadoCaso[] = [];
+  let cuotaAgotada = false;
   console.log("========================================");
   console.log("EVALUACIONES RAG — CRÉDITO VECINO");
   console.log("========================================");
 
-  let exitosas = 0;
-  let fallidas = 0;
+  for (const caso of casosSeleccionados) {
+    if (cuotaAgotada) {
+      resultados.push({
+        id: caso.id,
+        categoria: caso.categoria,
+        pregunta: caso.pregunta,
+        estado: "SKIPPED",
+        duracionMs: 0,
+        fuentesRecuperadas: [],
+        citasValidas: [],
+        citasInvalidas: [],
+        motivo: "No ejecutado: cuota de Gemini agotada en un caso anterior.",
+      });
 
-const idCaso = process.env.RAG_CASO;
-
-const casosSeleccionados = idCaso
-  ? CASOS_RAG.filter((caso) => caso.id === idCaso)
-  : CASOS_RAG;
-
-if (casosSeleccionados.length === 0) {
-  throw new Error(`No existe el caso de evaluación: ${idCaso}`);
-}
-
-for (const caso of casosSeleccionados) {
-  /*for (const caso of CASOS_RAG) {*/
+      console.log(`\nCaso: ${caso.id} — SKIPPED (cuota agotada)`);
+      continue;
+    }
     console.log(`\nCaso: ${caso.id}`);
     console.log(`Categoría: ${caso.categoria}`);
     console.log(`Pregunta: ${caso.pregunta}`);
@@ -33,13 +93,14 @@ for (const caso of casosSeleccionados) {
 
     try {
       const resultado = await responderPregunta(caso.pregunta);
-      const duracion = Math.round(performance.now() - inicio);
+      const duracionMs = Math.round(
+        performance.now() - inicio
+      );
 
       const fuentes = resultado.fuentesRecuperadas.map(
         (fuente) => fuente.id
       );
 
-      
       const validacionCitas = validarCitas(
         resultado.respuesta,
         fuentes
@@ -47,22 +108,23 @@ for (const caso of casosSeleccionados) {
 
       const citasValidas = validacionCitas.validas;
 
-      const citasEsperadas = caso.documentosEsperados.every(
-        (documento) =>
+      const citasEsperadas =
+        caso.documentosEsperados.every((documento) =>
           citasValidas.some((cita) =>
             cita.startsWith(`${documento}-chunk-`)
           )
-      );
+        );
 
       const citasCorrectas =
         !validacionCitas.sinCitas &&
         validacionCitas.invalidas.length === 0 &&
         citasEsperadas;
 
-
       const documentosEncontrados =
         caso.documentosEsperados.every((documento) =>
-          fuentes.some((fuente) => fuente.startsWith(documento))
+          fuentes.some((fuente) =>
+            fuente.startsWith(`${documento}-chunk-`)
+          )
         );
 
       const respuestaNormalizada =
@@ -70,15 +132,18 @@ for (const caso of casosSeleccionados) {
 
       const palabrasEncontradas =
         caso.palabrasEsperadas.every((palabra) =>
-          respuestaNormalizada.includes(palabra.toLowerCase())
+          respuestaNormalizada.includes(
+            palabra.toLowerCase()
+          )
         );
 
       const palabrasProhibidasAusentes =
         caso.palabrasProhibidas.every((palabra) =>
-          !respuestaNormalizada.includes(palabra.toLowerCase())
+          !respuestaNormalizada.includes(
+            palabra.toLowerCase()
+          )
         );
 
-      
       const esCasoSinEvidencia =
         caso.categoria === "sin_evidencia";
 
@@ -92,7 +157,15 @@ for (const caso of casosSeleccionados) {
           resultado.respuesta
         );
 
-      
+      const verificaciones = {
+        documentosEncontrados,
+        citasCorrectas,
+        palabrasEncontradas,
+        palabrasProhibidasAusentes,
+        reconoceFaltaDeInformacion,
+        noInventaTelefono: !contieneTelefono,
+      };
+
       const aprobada = esCasoSinEvidencia
         ? reconoceFaltaDeInformacion && !contieneTelefono
         : documentosEncontrados &&
@@ -100,41 +173,140 @@ for (const caso of casosSeleccionados) {
           palabrasProhibidasAusentes &&
           citasCorrectas;
 
-      console.log(`Tiempo: ${duracion} ms`);
-      console.log(`Fuentes: ${fuentes.join(", ") || "Ninguna"}`);
-      console.log(
-  `Citas válidas: ${citasValidas.join(", ") || "Ninguna"}`
-);
+      const estado: EstadoEvaluacion =
+        aprobada ? "PASS" : "FAIL";
 
-console.log(
-  `Citas inválidas: ${
-    validacionCitas.invalidas.join(", ") || "Ninguna"
-  }`
-);
-      console.log(`Respuesta:\n${resultado.respuesta}`);
+      const motivo = aprobada
+        ? undefined
+        : esCasoSinEvidencia
+          ? "No reconoció adecuadamente la falta de evidencia o incluyó un teléfono."
+          : "No cumplió una o más verificaciones de documentos, citas o contenido.";
+
+      resultados.push({
+        id: caso.id,
+        categoria: caso.categoria,
+        pregunta: caso.pregunta,
+        estado,
+        duracionMs,
+        fuentesRecuperadas: fuentes,
+        citasValidas,
+        citasInvalidas: validacionCitas.invalidas,
+        respuesta: resultado.respuesta,
+        verificaciones,
+        motivo,
+      });
+
+      console.log(`Tiempo: ${duracionMs} ms`);
       console.log(
-        `Resultado preliminar: ${aprobada ? "PASS" : "FAIL"}`
+        `Fuentes: ${fuentes.join(", ") || "Ninguna"}`
+      );
+      console.log(
+        `Citas válidas: ${citasValidas.join(", ") || "Ninguna"}`
+      );
+      console.log(
+        `Citas inválidas: ${
+          validacionCitas.invalidas.join(", ") || "Ninguna"
+        }`
+      );
+      console.log(`Respuesta:\n${resultado.respuesta}`);
+      console.log(`Resultado preliminar: ${estado}`);
+    } catch (error: unknown) {
+      const duracionMs = Math.round(
+        performance.now() - inicio
       );
 
-      if (aprobada) {
-        exitosas++;
-      } else {
-        fallidas++;
+      const detalleError = describirError(error);
+
+      if (esErrorCuotaGemini(error)) {
+        cuotaAgotada = true;
+
+        console.warn(
+          "Se detectó agotamiento de cuota de Gemini. " +
+          "Los siguientes casos no se ejecutarán."
+        );
       }
-    } catch (error) {
-      fallidas++;
-      console.error("Error:", error);
+
+      resultados.push({
+        id: caso.id,
+        categoria: caso.categoria,
+        pregunta: caso.pregunta,
+        estado: "ERROR",
+        duracionMs,
+        fuentesRecuperadas: [],
+        citasValidas: [],
+        citasInvalidas: [],
+        error: detalleError,
+      });
+
+      console.error(
+        `Error externo o de ejecución en ${caso.id}:`,
+        detalleError
+      );
     }
   }
+
+  const resumen = {
+    aprobadas: resultados.filter(
+      (resultado) => resultado.estado === "PASS"
+    ).length,
+    fallidas: resultados.filter(
+      (resultado) => resultado.estado === "FAIL"
+    ).length,
+    errores: resultados.filter(
+      (resultado) => resultado.estado === "ERROR"
+    ).length,
+    total: resultados.length,
+    omitidas: resultados.filter(
+      (resultado) => resultado.estado === "SKIPPED"
+    ).length,
+  };
+
+  const reporte = {
+    proyecto: "Crédito Vecino",
+    componente: "E6 - Evaluaciones RAG",
+    fechaInicio,
+    fechaFin: new Date().toISOString(),
+    filtroCaso: idCaso ?? null,
+    criterio:
+      "Evaluación automatizada preliminar basada en citas, documentos y verificaciones de contenido.",
+    resumen,
+    resultados,
+  };
+
+  const directorio = join(
+    process.cwd(),
+    "reportes",
+    "rag"
+  );
+
+  await mkdir(directorio, { recursive: true });
+
+  const nombreArchivo =
+    `evaluacion-${fechaInicio.replace(/[:.]/g, "-")}` +
+    `${idCaso ? `-${idCaso}` : ""}.json`;
+
+  const rutaReporte = join(
+    directorio,
+    nombreArchivo
+  );
+
+  await writeFile(
+    rutaReporte,
+    JSON.stringify(reporte, null, 2),
+    "utf8"
+  );
 
   console.log("\n========================================");
   console.log("RESUMEN DE EVALUACIONES");
   console.log("========================================");
-  console.log(`Aprobadas preliminarmente: ${exitosas}`);
-  console.log(`Fallidas: ${fallidas}`);
-  console.log(`Total: ${CASOS_RAG.length}`);
+  console.log(`Aprobadas: ${resumen.aprobadas}`);
+  console.log(`Fallidas: ${resumen.fallidas}`);
+  console.log(`Errores: ${resumen.errores}`);
+  console.log(`Total ejecutadas: ${resumen.total}`);
+  console.log(`Reporte: ${rutaReporte}`);
+  console.log(`Omitidas: ${resumen.omitidas}`);
 
-  if (fallidas > 0) {
+  if (resumen.fallidas > 0 || resumen.errores > 0) {
     process.exitCode = 1;
   }
 }
