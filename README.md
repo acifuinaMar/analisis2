@@ -126,6 +126,185 @@ Cierre mensual
 
 ---
 
+
+# RAG — Generación aumentada por recuperación (E4)
+
+El sistema Crédito Vecino incorpora un módulo RAG que permite
+responder preguntas sobre las políticas institucionales
+utilizando documentos del corpus canónico y citando las
+fuentes consultadas.
+
+### Arquitectura
+
+El flujo de una consulta es:
+
+1. El usuario formula una pregunta.
+2. Gemini genera un embedding de la pregunta.
+3. PostgreSQL con pgvector recupera los fragmentos
+   documentalmente más similares.
+4. Gemini Flash genera una respuesta utilizando
+   los fragmentos recuperados como contexto.
+5. El sistema valida que los identificadores citados
+   pertenezcan a los fragmentos recuperados.
+6. Se entrega la respuesta o un mensaje indicando
+   que no fue posible validar las referencias.
+
+### Corpus documental
+
+El corpus está compuesto por siete documentos Markdown
+del paquete canónico:
+
+- FAQ-CLIENTES-01.md
+- MAN-PRODUCTO-01.md
+- NOTA-CAMPO-07.md
+- POL-2024-01.md
+- POL-2026-10.md
+- POL-CARTERA-01.md
+- POL-COBRO-01.md
+
+Los documentos se leen desde la ruta configurada en
+CV_DATA_DIR. El paquete canónico no se modifica.
+
+### Estrategia de fragmentación
+
+Se utiliza una fragmentación propia implementada en
+src/rag/fragmentador.ts.
+
+Configuración predeterminada:
+
+- Tamaño máximo: 1000 caracteres.
+- Solapamiento configurado: 150 caracteres.
+- Separación prioritaria por párrafos Markdown.
+- División adicional para bloques que superan el tamaño.
+- Identificadores estables por documento y posición.
+- Conservación del identificador y la ruta de origen.
+
+El solapamiento se aplica al dividir bloques largos;
+no se garantiza entre todos los fragmentos separados
+por párrafos.
+
+Esta estrategia permite recuperar secciones relevantes
+sin enviar documentos completos al modelo generativo.
+
+### Modelo de embeddings
+
+Proveedor: Google Gemini.
+
+Modelo: gemini-embedding-001.
+
+Dimensiones: 768.
+
+Tipos de tarea utilizados:
+
+- RETRIEVAL_DOCUMENT para indexar documentos.
+- RETRIEVAL_QUERY para buscar mediante preguntas.
+
+Se eligió este servicio para generar representaciones
+semánticas sin ejecutar un modelo local pesado.
+
+### Almacenamiento vectorial
+
+Se utiliza PostgreSQL en Supabase con la extensión
+pgvector.
+
+Tabla: public.rag_fragmentos.
+
+Los registros almacenan:
+
+- Identificador del fragmento.
+- Identificador del documento.
+- Ruta de la fuente.
+- Contenido textual.
+- Posición del fragmento.
+- Vector de 768 dimensiones.
+
+La búsqueda utiliza distancia coseno mediante pgvector.
+
+### Generación de respuestas
+
+Modelo generativo utilizado: gemini-3.8-flash.
+
+El módulo src/rag/responderPregunta.ts recupera hasta
+cinco fragmentos y los proporciona al modelo como
+contexto documental.
+
+Las instrucciones del asistente se mantienen separadas
+en src/rag/instruccionesRAG.ts.
+
+### Citas y validación
+
+El asistente debe citar identificadores de fragmentos
+recuperados, por ejemplo:
+
+POL-2024-01-chunk-1
+
+El sistema utiliza:
+
+- src/rag/validarCitas.ts
+- src/rag/evaluarRespuesta.ts
+
+La validación comprueba que los identificadores citados
+pertenezcan a los fragmentos recuperados.
+
+Esta comprobación no demuestra automáticamente que
+cada afirmación esté respaldada por el contenido citado.
+
+### Seguridad
+
+Los documentos recuperados se tratan como datos no
+confiables y nunca como instrucciones del sistema.
+
+Se realizaron pruebas de inyección de instrucciones
+con documentos simulados y consultas al corpus.
+
+La resistencia frente al caso canónico OP-7 requiere
+su comprobación específica antes de cerrar E4.
+
+Las credenciales se configuran mediante variables de
+entorno y no deben incluirse en el repositorio.
+
+### Pruebas y evidencia
+
+Se utilizan Vitest y TypeScript.
+
+La suite completa registró:
+
+- 22 archivos de pruebas aprobados.
+- 284 pruebas aprobadas.
+
+Además, se verificó la consulta G-8:
+
+"Según las políticas vigentes, ¿cómo se calcula el
+interés moratorio de un crédito otorgado en agosto
+de 2026? Cita la fuente."
+
+El asistente identificó POL-2024-01 como política
+aplicable y explicó la tasa nominal anual del 24 %,
+la base Actual/360 y el cálculo sobre capital en mora,
+con referencias a los fragmentos recuperados.
+
+### Ejecución de pruebas manuales
+
+Desde la raíz del proyecto:
+
+```powershell
+node --env-file=.env --import tsx src/rag/probarBusqueda.ts
+```
+
+```powershell
+node --env-file=.env --import tsx src/rag/probarRespuesta.ts
+```
+
+```powershell
+node --env-file=.env --import tsx src/rag/probarInyeccion.ts
+```
+
+Para ejecutar la suite automatizada:
+
+```powershell
+node --env-file=.env --import tsx node_modules/vitest/vitest.mjs run
+```
+
 # Estructura del repositorio
 
 ```text

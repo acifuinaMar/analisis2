@@ -26,7 +26,8 @@ pnpm-debug.log*
 # Variables de entorno
 # ==========================
 .env
-.env.local
+.env.*
+!.env.example
 
 # ==========================
 # Archivos del sistema
