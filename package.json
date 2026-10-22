@@ -9,7 +9,10 @@
   "scripts": {
     "test": "node --env-file=.env ./node_modules/vitest/vitest.mjs run",
     "demo": "tsx src/demo.ts",
-    "contratos:openapi": "tsx src/contratos/generar-openapi.ts"
+    "contratos:openapi": "tsx src/contratos/generar-openapi.ts",
+    "db:probar": "node --env-file=.env --import tsx src/rag/probarConexionBD.ts",
+    "rag:buscar": "node --env-file=.env --import tsx src/rag/probarBusqueda.ts",
+    "rag:responder": "node --env-file=.env --import tsx src/rag/probarRespuesta.ts"
   },
   "repository": {
     "type": "git",
@@ -33,6 +36,7 @@
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.4",
     "@google/genai": "^2.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "date-fns": "^4.4.0",
     "js-yaml": "^4.3.2",
     "pg": "^8.23.1",
