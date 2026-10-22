@@ -267,10 +267,15 @@ export class PlanAmortizacion {
         fechaCorte: Date
     ): void {
 
+        // La version de la politica decide si el gasto aplica: el
+        // paquete canonico lo limita a POL-2026-10 (decision RP-08).
+        const version = this.calculadoraMora.versionPolitica();
+
         for (const cuota of exigibles) {
             this.gastoGestion.evaluarAlCorte(
                 this.claveDe(cuota),
-                cuota.diasAtraso(fechaCorte)
+                cuota.diasAtraso(fechaCorte),
+                version
             );
         }
     }

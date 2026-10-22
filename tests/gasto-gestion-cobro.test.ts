@@ -9,6 +9,9 @@ import { PlanAmortizacion } from "../src/dominio/plan-amortizacion";
 import { PoliticaCredito, BaseConteo } from "../src/dominio/politica-credito";
 import { CalculoFrances } from "../src/estrategias/calculo-frances";
 
+/** Version de la politica a la que el paquete canonico limita el gasto. */
+const ESCALONADA = "POL-2026-10";
+
 const POLITICA = new PoliticaCredito(
     "POL-2026-10", 0.36, 0.24, BaseConteo.ACTUAL_360,
     "Comite de Credito", new Date(2026, 9, 1)
@@ -50,7 +53,7 @@ function corteCuota2(diasAtraso: number): Date {
 describe("Gasto de gestion de cobro - reglas (CP-02, 7.5)", () => {
 
     it("Son Q25.00 fijos por cuota vencida", () => {
-        expect(GastoGestionCobro.montoPorCuota().obtenerValor()).toBe(25);
+        expect(new GastoGestionCobro().montoPorCuota().obtenerValor()).toBe(25);
     });
 
     it("No se cobra en Mora 1: no hubo visita", () => {
@@ -68,20 +71,20 @@ describe("Gasto de gestion de cobro - reglas (CP-02, 7.5)", () => {
 
         const libro = new GastoGestionCobro();
 
-        expect(libro.evaluarAlCorte("C-1", 30).esCero()).toBe(true);
-        expect(libro.evaluarAlCorte("C-1", 31).obtenerValor()).toBe(25);
+        expect(libro.evaluarAlCorte("C-1", 30, ESCALONADA).esCero()).toBe(true);
+        expect(libro.evaluarAlCorte("C-1", 31, ESCALONADA).obtenerValor()).toBe(25);
     });
 
     it("Pasar a Mora 3 o a Vencido NO genera un gasto nuevo", () => {
 
         const libro = new GastoGestionCobro();
 
-        libro.evaluarAlCorte("C-1", 31);
+        libro.evaluarAlCorte("C-1", 31, ESCALONADA);
 
         // Es el mismo hecho, no uno distinto.
-        expect(libro.evaluarAlCorte("C-1", 61).esCero()).toBe(true);
-        expect(libro.evaluarAlCorte("C-1", 91).esCero()).toBe(true);
-        expect(libro.evaluarAlCorte("C-1", 120).esCero()).toBe(true);
+        expect(libro.evaluarAlCorte("C-1", 61, ESCALONADA).esCero()).toBe(true);
+        expect(libro.evaluarAlCorte("C-1", 91, ESCALONADA).esCero()).toBe(true);
+        expect(libro.evaluarAlCorte("C-1", 120, ESCALONADA).esCero()).toBe(true);
 
         expect(libro.generadoPara("C-1").obtenerValor()).toBe(25);
     });
@@ -90,8 +93,8 @@ describe("Gasto de gestion de cobro - reglas (CP-02, 7.5)", () => {
 
         const libro = new GastoGestionCobro();
 
-        libro.evaluarAlCorte("CR-1-cuota-2", 45);
-        libro.evaluarAlCorte("CR-1-cuota-3", 35);
+        libro.evaluarAlCorte("CR-1-cuota-2", 45, ESCALONADA);
+        libro.evaluarAlCorte("CR-1-cuota-3", 35, ESCALONADA);
 
         expect(libro.cuotasConGasto()).toBe(2);
         expect(libro.totalGenerado().obtenerValor()).toBe(50);
@@ -104,8 +107,8 @@ describe("Gasto de gestion de cobro - IDEMPOTENCIA (7.5 y P1 6.10)", () => {
 
         const libro = new GastoGestionCobro();
 
-        const primera = libro.evaluarAlCorte("C-1", 31);
-        const segunda = libro.evaluarAlCorte("C-1", 31);
+        const primera = libro.evaluarAlCorte("C-1", 31, ESCALONADA);
+        const segunda = libro.evaluarAlCorte("C-1", 31, ESCALONADA);
 
         expect(primera.obtenerValor()).toBe(25);
         expect(segunda.esCero()).toBe(true);
@@ -117,7 +120,7 @@ describe("Gasto de gestion de cobro - IDEMPOTENCIA (7.5 y P1 6.10)", () => {
         const libro = new GastoGestionCobro();
 
         for (let dia = 31; dia <= 130; dia++) {
-            libro.evaluarAlCorte("C-1", dia);
+            libro.evaluarAlCorte("C-1", dia, ESCALONADA);
         }
 
         expect(libro.generadoPara("C-1").obtenerValor()).toBe(25);
@@ -269,8 +272,16 @@ describe("Coexistencia: el credito viejo no cambia (CP-03)", () => {
         // Plana 24 %: Q21.77, contra los Q18.14 de la escalonada.
         expect(deuda.interesMoratorio.obtenerValor()).toBe(21.77);
 
-        // El gasto de gestion si aplica a ambos: es politica de cobranza,
-        // no de tasa.
-        expect(deuda.gastos.obtenerValor()).toBe(25.00);
+        // El gasto de gestion NO aplica a la politica plana.
+        //
+        // En el Proyecto 2 se habia asumido que si, razonando que el gasto
+        // es politica de cobranza y no de tasa: la visita del asesor
+        // ocurre igual. El enunciado (P2 7.5) no lo aclaraba.
+        //
+        // El paquete canonico del Proyecto Final lo decide y lo documenta:
+        // gasto_gestion_cobro.aplica_a_politicas = ["POL-2026-10"], con la
+        // nota de la decision RP-08. Como es el oraculo contra el que se
+        // comparan las cifras, manda el paquete.
+        expect(deuda.gastos.esCero()).toBe(true);
     });
 });
