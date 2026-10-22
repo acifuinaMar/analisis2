@@ -9,9 +9,11 @@ import {
 import {
     ConsultarCreditoEntrada,
     DeudaDeCuotaEntrada,
+    ExplicarMoraEntrada,
     aFechaCorte,
     consultarCreditoForma,
-    deudaDeCuotaForma
+    deudaDeCuotaForma,
+    explicarMoraForma
 } from "./esquemas";
 
 /**
@@ -194,6 +196,41 @@ export function crearServidorMcp(
 
                 return comoContenido(
                     await consultas.calcularDeudaDeCuota(
+                        idCredito,
+                        numeroCuota,
+                        aFechaCorte(fechaCorte)
+                    )
+                );
+            } catch (error) {
+                return comoContenido(aErrorHerramienta(error));
+            }
+        }
+    );
+
+    // ------------------------------------------------------------------
+    // Capacidad 3 · Explicar una mora (G-5, G-7)
+    // ------------------------------------------------------------------
+
+    registrar(
+        "explicar_mora",
+        {
+            title: "Explicar una mora",
+            description:
+                "Explica como se formo el interes moratorio de una cuota a "
+                + "una fecha de corte: capital en mora y desglose por tramo "
+                + "recorrido, con los dias y la tasa de cada tramo. Indica "
+                + "si la suma de los tramos redondeados difiere del total, "
+                + "porque el redondeo ocurre una sola vez al cerrar el "
+                + "calculo. Solo lectura.",
+            inputSchema: explicarMoraForma
+        },
+        async (argumentos) => {
+            try {
+                const { idCredito, numeroCuota, fechaCorte } =
+                    ExplicarMoraEntrada.parse(argumentos);
+
+                return comoContenido(
+                    await consultas.explicarMora(
                         idCredito,
                         numeroCuota,
                         aFechaCorte(fechaCorte)

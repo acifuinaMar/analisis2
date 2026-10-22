@@ -1,6 +1,7 @@
 import { Dinero } from "../dinero";
 import {
     BaseConteoMora,
+    DesgloseMora,
     PoliticaMora,
     aplicarTope,
     validarDiasAtraso
@@ -22,7 +23,7 @@ export class PoliticaMoraPlana implements PoliticaMora {
 
         public readonly version: string,
 
-        private readonly tnaMoratoria: number,
+        public readonly tnaMoratoria: number,
 
         private readonly baseConteo: BaseConteoMora = BaseConteoMora.ACTUAL_360
 
@@ -54,5 +55,48 @@ export class PoliticaMoraPlana implements PoliticaMora {
         );
 
         return aplicarTope(moratorio, capitalEnMora);
+    }
+
+    /**
+     * Una sola linea: la politica plana cobra la misma tasa todos los
+     * dias, asi que no hay tramos que recorrer.
+     */
+    public explicar(
+        capitalEnMora: Dinero,
+        diasAtraso: number
+    ): DesgloseMora {
+
+        validarDiasAtraso(diasAtraso);
+
+        const total = this.calcular(capitalEnMora, diasAtraso);
+
+        if (diasAtraso === 0) {
+            return {
+                versionPolitica: this.version,
+                capitalEnMora,
+                diasAtraso,
+                lineas: [],
+                sumaSinRedondear: 0,
+                total
+            };
+        }
+
+        const monto =
+            capitalEnMora.obtenerValor() * this.tasaDiaria() * diasAtraso;
+
+        return {
+            versionPolitica: this.version,
+            capitalEnMora,
+            diasAtraso,
+            lineas: [{
+                tramo: "plana",
+                diasEnTramo: diasAtraso,
+                tnaMoratoria: this.tnaMoratoria,
+                tasaDiaria: this.tasaDiaria(),
+                montoSinRedondear: monto
+            }],
+            sumaSinRedondear: monto,
+            total
+        };
     }
 }

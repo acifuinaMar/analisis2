@@ -2,6 +2,9 @@ import { Dinero } from "../dominio/dinero";
 import { NombreEstado } from "../dominio/nombre-estado";
 import { RepositorioCartera } from "../dominio/repositorio-cartera";
 import { ClasificadorTramoMora, TramoMora } from "../dominio/tramo-mora";
+import {
+    CatalogoPoliticasMora
+} from "../dominio/politica-mora/catalogo-politicas";
 import { ReconstructorCredito } from "./reconstructor-credito";
 
 /**
@@ -102,6 +105,51 @@ export interface DeudaCuota {
     readonly capital: number;
 
     readonly totalExigible: number;
+
+}
+
+export interface LineaMora {
+
+    readonly tramo: string;
+
+    readonly dias: number;
+
+    readonly tnaMoratoria: string;
+
+    readonly tasaDiaria: number;
+
+    readonly monto: number;
+
+}
+
+export interface ExplicacionMora {
+
+    readonly idCredito: string;
+
+    readonly numeroCuota: number;
+
+    readonly fechaCorte: string;
+
+    readonly politica: string;
+
+    readonly capitalEnMora: number;
+
+    readonly diasAtraso: number;
+
+    readonly tramo: TramoMora;
+
+    readonly tramosRecorridos: ReadonlyArray<LineaMora>;
+
+    /** Suma de los montos ya redondeados, para contrastarla con el total. */
+    readonly sumaDeTramosRedondeados: number;
+
+    readonly total: number;
+
+    /**
+     * Verdadero cuando la suma de las lineas redondeadas difiere del
+     * total. La pantalla debe explicarlo, no disimularlo.
+     */
+    readonly hayDiferenciaPorRedondeo: boolean;
 
 }
 
@@ -206,6 +254,75 @@ export class ConsultasCartera {
         };
     }
 
+    /**
+     * Capacidad 3: explicar una mora.
+     *
+     * Devuelve el capital en mora y el desglose por tramo recorrido, con
+     * los dias y la tasa de cada uno. Ejercita G-5 y G-7.
+     *
+     * El enunciado describe bien el problema de diseno: si solo dice
+     * "Mora: Q50.80" el cliente no puede verificar nada; si muestra la
+     * formula completa, no se entiende. Por eso se devuelven las lineas
+     * Y la diferencia por redondeo, para que la pantalla pueda explicarla.
+     */
+    public async explicarMora(
+        idCredito: string,
+        numeroCuota: number,
+        fechaCorte: Date
+    ): Promise<ExplicacionMora> {
+
+        const { plan, registro } = await this.reconstruirCredito(idCredito);
+
+        const cuota = plan.obtenerCuotas()
+            .find(c => c.numero === numeroCuota);
+
+        if (!cuota) {
+            throw new ErrorConsulta(
+                "CUOTA_INEXISTENTE",
+                `El credito ${idCredito} no tiene una cuota ${numeroCuota}.`
+            );
+        }
+
+        const politica = CatalogoPoliticasMora
+            .vigente()
+            .resolver(registro.fechaDesembolso);
+
+        const diasAtraso = cuota.diasAtraso(fechaCorte);
+
+        const desglose = politica.explicar(
+            cuota.capitalPendiente(),
+            diasAtraso
+        );
+
+        const lineas: LineaMora[] = desglose.lineas.map(linea => ({
+            tramo: linea.tramo,
+            dias: linea.diasEnTramo,
+            tnaMoratoria: `${(linea.tnaMoratoria * 100).toFixed(0)} %`,
+            tasaDiaria: Number(linea.tasaDiaria.toFixed(9)),
+            monto: redondear(linea.montoSinRedondear)
+        }));
+
+        const sumaRedondeada = redondear(
+            lineas.reduce((total, l) => total + l.monto, 0)
+        );
+
+        const total = desglose.total.obtenerValor();
+
+        return {
+            idCredito,
+            numeroCuota,
+            fechaCorte: aTexto(fechaCorte),
+            politica: desglose.versionPolitica,
+            capitalEnMora: desglose.capitalEnMora.obtenerValor(),
+            diasAtraso,
+            tramo: ConsultasCartera.CLASIFICADOR.clasificar(diasAtraso),
+            tramosRecorridos: lineas,
+            sumaDeTramosRedondeados: sumaRedondeada,
+            total,
+            hayDiferenciaPorRedondeo: sumaRedondeada !== total
+        };
+    }
+
     // ------------------------------------------------------------------
 
     private async reconstruirCredito(idCredito: string) {
@@ -223,6 +340,10 @@ export class ConsultasCartera {
 
         return this.reconstructor.reconstruir(registro, pagos);
     }
+}
+
+function redondear(valor: number): number {
+    return Math.round(Number(valor.toPrecision(12)) * 100) / 100;
 }
 
 /** Las fechas salen en AAAA-MM-DD, el mismo formato del paquete. */

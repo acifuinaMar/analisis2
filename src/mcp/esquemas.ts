@@ -75,6 +75,18 @@ export const DeudaDeCuotaEntrada = z.object({
     fechaCorte: FechaCorteEsquema
 });
 
+export const explicarMoraForma: ZodRawShape = {
+    idCredito: IdCreditoEsquema,
+    numeroCuota: NumeroCuotaEsquema,
+    fechaCorte: FechaCorteEsquema
+};
+
+export const ExplicarMoraEntrada = z.object({
+    idCredito: IdCreditoEsquema,
+    numeroCuota: NumeroCuotaEsquema,
+    fechaCorte: FechaCorteEsquema
+});
+
 export type ConsultarCreditoEntrada =
     z.infer<typeof ConsultarCreditoEntrada>;
 
