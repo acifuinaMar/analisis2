@@ -73,6 +73,7 @@ describe("Servidor MCP - herramientas expuestas", () => {
         expect(nombres).toContain("consultar_credito");
         expect(nombres).toContain("calcular_deuda_de_cuota");
         expect(nombres).toContain("explicar_mora");
+        expect(nombres).toContain("listar_creditos_en_mora");
     });
 
     it("Cada herramienta declara su esquema de entrada", async () => {
@@ -280,5 +281,97 @@ describe("Servidor MCP - solo lectura por defecto", () => {
         });
 
         expect(a).toEqual(b);
+    });
+});
+
+
+describe("Servidor MCP - listar_creditos_en_mora (G-4)", () => {
+
+    it("Lista los creditos en Mora 3 al corte", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "listar_creditos_en_mora", {
+            fechaCorte: CORTE,
+            tramo: "mora_3"
+        });
+
+        expect(r.fechaCorte).toBe("2026-10-31");
+        expect(r.tramoFiltrado).toBe("mora_3");
+        expect(r.cantidad).toBe(2);
+        expect(r.saldoCapitalTotal).toBe(1954.26);
+
+        const creditos = r.creditos as Array<Record<string, unknown>>;
+        expect(creditos.map(c => c.idCredito))
+            .toEqual(["CV-2026-0035", "CV-2026-0030"]);
+        expect(creditos.map(c => c.diasAtraso)).toEqual([70, 65]);
+    });
+
+    it("Sin tramo devuelve toda la cartera en mora", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "listar_creditos_en_mora", {
+            fechaCorte: CORTE
+        });
+
+        expect(r.cantidad).toBe(16);
+        expect(r.tramoFiltrado).toBeNull();
+    });
+
+    /**
+     * El esquema solo admite los cuatro tramos de mora. Pedir "al_dia" a
+     * una herramienta que lista morosos es una contradiccion, y el SDK la
+     * rechaza en el borde del protocolo antes de que el nucleo se entere.
+     */
+    it("Rechaza un tramo que no es de mora", async () => {
+
+        const cliente = await clienteConectado();
+
+        const respuesta = await cliente.callTool({
+            name: "listar_creditos_en_mora",
+            arguments: { fechaCorte: CORTE, tramo: "al_dia" }
+        });
+
+        expect(respuesta.isError).toBe(true);
+    });
+
+    it("Rechaza una fecha de corte mal formada", async () => {
+
+        const cliente = await clienteConectado();
+
+        const respuesta = await cliente.callTool({
+            name: "listar_creditos_en_mora",
+            arguments: { fechaCorte: "31/10/2026" }
+        });
+
+        expect(respuesta.isError).toBe(true);
+    });
+
+    /**
+     * G-4 es la consulta "tablero -> detalle": la cifra del listado y la
+     * del detalle se muestran dos veces y deben coincidir. Se comprueba
+     * atravesando el protocolo MCP, no solo el servicio.
+     */
+    it("La linea del listado coincide con consultar_credito", async () => {
+
+        const cliente = await clienteConectado();
+
+        const listado = await invocar(cliente, "listar_creditos_en_mora", {
+            fechaCorte: CORTE,
+            tramo: "mora_3"
+        });
+
+        const linea = (listado.creditos as Array<Record<string, unknown>>)[1];
+
+        const detalle = await invocar(cliente, "consultar_credito", {
+            idCredito: linea.idCredito as string,
+            fechaCorte: CORTE
+        });
+
+        expect(detalle.idCredito).toBe("CV-2026-0030");
+        expect(detalle.diasAtraso).toBe(linea.diasAtraso);
+        expect(detalle.tramo).toBe(linea.tramo);
+        expect(detalle.saldoCapital).toBe(linea.saldoCapital);
     });
 });

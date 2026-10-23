@@ -8,10 +8,12 @@ import {
 } from "../servicios/consultas-cartera";
 import {
     ConsultarCreditoEntrada,
+    CreditosEnMoraEntrada,
     DeudaDeCuotaEntrada,
     ExplicarMoraEntrada,
     aFechaCorte,
     consultarCreditoForma,
+    creditosEnMoraForma,
     deudaDeCuotaForma,
     explicarMoraForma
 } from "./esquemas";
@@ -234,6 +236,40 @@ export function crearServidorMcp(
                         idCredito,
                         numeroCuota,
                         aFechaCorte(fechaCorte)
+                    )
+                );
+            } catch (error) {
+                return comoContenido(aErrorHerramienta(error));
+            }
+        }
+    );
+
+    // ------------------------------------------------------------------
+    // Capacidad 4 · Listar creditos en mora (G-4)
+    // ------------------------------------------------------------------
+
+    registrar(
+        "listar_creditos_en_mora",
+        {
+            title: "Listar creditos en mora",
+            description:
+                "Lista los creditos con atraso a una fecha de corte, cada "
+                + "uno con su cliente, dias de atraso, tramo, saldo de "
+                + "capital y cuotas vencidas. Se puede filtrar por tramo "
+                + "(mora_1, mora_2, mora_3 o vencido); sin filtro devuelve "
+                + "todos los que tengan atraso, del mayor al menor. "
+                + "Incluye la cantidad y el saldo total. Solo lectura.",
+            inputSchema: creditosEnMoraForma
+        },
+        async (argumentos) => {
+            try {
+                const { fechaCorte, tramo } =
+                    CreditosEnMoraEntrada.parse(argumentos);
+
+                return comoContenido(
+                    await consultas.listarCreditosEnMora(
+                        aFechaCorte(fechaCorte),
+                        tramo
                     )
                 );
             } catch (error) {

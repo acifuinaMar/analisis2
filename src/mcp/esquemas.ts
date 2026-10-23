@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { ZodRawShape } from "zod";
 
+import { TramoMora } from "../dominio/tramo-mora";
+
 /**
  * Esquemas Zod de las herramientas MCP (E3).
  *
@@ -85,6 +87,40 @@ export const ExplicarMoraEntrada = z.object({
     idCredito: IdCreditoEsquema,
     numeroCuota: NumeroCuotaEsquema,
     fechaCorte: FechaCorteEsquema
+});
+
+/**
+ * Tramo de mora por el que filtrar el listado.
+ *
+ * El enum se arma con los valores de TramoMora y no con literales
+ * sueltos: si el dominio renombra un tramo, esto deja de compilar en vez
+ * de aceptar en silencio un filtro que nunca calza con nada.
+ *
+ * AL_DIA queda fuera a proposito: la herramienta lista creditos EN MORA,
+ * y pedirle los que estan al dia es una contradiccion que conviene
+ * rechazar en el borde antes que devolver una lista vacia inexplicable.
+ */
+const TramoEnMoraEsquema = z
+    .enum([
+        TramoMora.MORA_1,
+        TramoMora.MORA_2,
+        TramoMora.MORA_3,
+        TramoMora.VENCIDO
+    ])
+    .describe(
+        "Tramo de mora por el que filtrar: mora_1 (1 a 30 dias), "
+        + "mora_2 (31 a 60), mora_3 (61 a 90) o vencido (mas de 90). "
+        + "Si se omite, devuelve todos los creditos con atraso."
+    );
+
+export const creditosEnMoraForma: ZodRawShape = {
+    fechaCorte: FechaCorteEsquema,
+    tramo: TramoEnMoraEsquema.optional()
+};
+
+export const CreditosEnMoraEntrada = z.object({
+    fechaCorte: FechaCorteEsquema,
+    tramo: TramoEnMoraEsquema.optional()
 });
 
 export type ConsultarCreditoEntrada =
