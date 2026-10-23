@@ -46,3 +46,7 @@ Thumbs.db
 *.tsbuildinfo
 # Reportes generados durante evaluaciones RAG
 /reportes/rag/
+# ==========================
+# Base de datos local (PGlite)
+# ==========================
+.cv-db/

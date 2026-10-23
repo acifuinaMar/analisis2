@@ -12,7 +12,8 @@
     "contratos:openapi": "tsx src/contratos/generar-openapi.ts",
     "db:probar": "node --env-file=.env --import tsx src/rag/probarConexionBD.ts",
     "rag:buscar": "node --env-file=.env --import tsx src/rag/probarBusqueda.ts",
-    "rag:responder": "node --env-file=.env --import tsx src/rag/probarRespuesta.ts"
+    "rag:responder": "node --env-file=.env --import tsx src/rag/probarRespuesta.ts",
+    "cargar": "node --env-file=.env --import tsx src/persistencia/cargar.ts"
   },
   "repository": {
     "type": "git",
@@ -26,6 +27,7 @@
   "homepage": "https://github.com/acifuinaMar/analisis2#readme",
   "devDependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",
+    "@electric-sql/pglite": "^0.5.11",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.4.0",
     "@types/pg": "^8.23.1",
