@@ -72,6 +72,7 @@ describe("Servidor MCP - herramientas expuestas", () => {
 
         expect(nombres).toContain("consultar_credito");
         expect(nombres).toContain("calcular_deuda_de_cuota");
+        expect(nombres).toContain("explicar_mora");
     });
 
     it("Cada herramienta declara su esquema de entrada", async () => {
@@ -107,9 +108,11 @@ describe("Servidor MCP - devuelve lo mismo que el nucleo", () => {
         expect(r.idCredito).toBe("CV-2026-0030");
         expect(r.fechaCorte).toBe("2026-10-31");
         expect(r.estado).toBe("en_mora");
-        expect(r.tramo).toBe("vencido");
-        expect(r.cuotasPagadas).toBe(1);
-        expect(r.cuotasVencidas).toBe(5);
+        expect(r.tramo).toBe("mora_3");
+        expect(r.cuotasPagadas).toBe(2);
+        expect(r.cuotasVencidas).toBe(3);
+        expect(r.diasAtraso).toBe(65);
+        expect(r.saldoCapital).toBe(686.16);
     });
 
     it("calcular_deuda_de_cuota desglosa los cuatro rubros", async () => {

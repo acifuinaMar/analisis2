@@ -35,22 +35,24 @@ describe("Explicar una mora - consulta G-7", () => {
         const r = await consultas()
             .explicarMora("CV-2026-0410", 2, new Date(2027, 0, 24));
 
+        // Desembolso 10/10/2026 a 12 meses: la cuota 2 vence el 10 de
+        // diciembre de 2026, asi que al 24 de enero lleva 45 dias.
         expect(r.fechaCorte).toBe("2027-01-24");
         expect(r.politica).toBe("POL-2026-10");
         expect(r.capitalEnMora).toBe(725.76);
-        expect(r.diasAtraso).toBe(75);
-        expect(r.tramo).toBe(TramoMora.MORA_3);
+        expect(r.diasAtraso).toBe(45);
+        expect(r.tramo).toBe(TramoMora.MORA_2);
     });
 
-    it("Reparte los 75 dias en tres tramos: 30, 30 y 15", async () => {
+    it("Reparte los 45 dias en dos tramos: 30 y 15", async () => {
 
         const r = await consultas()
             .explicarMora("CV-2026-0410", 2, new Date(2027, 0, 24));
 
         expect(r.tramosRecorridos.map(l => l.tramo))
-            .toEqual(["mora_1", "mora_2", "mora_3"]);
+            .toEqual(["mora_1", "mora_2"]);
 
-        expect(r.tramosRecorridos.map(l => l.dias)).toEqual([30, 30, 15]);
+        expect(r.tramosRecorridos.map(l => l.dias)).toEqual([30, 15]);
 
         const suma = r.tramosRecorridos
             .reduce((total, l) => total + l.dias, 0);
@@ -63,11 +65,34 @@ describe("Explicar una mora - consulta G-7", () => {
             .explicarMora("CV-2026-0410", 2, new Date(2027, 0, 24));
 
         expect(r.tramosRecorridos.map(l => l.tnaMoratoria))
-            .toEqual(["18 %", "24 %", "30 %"]);
+            .toEqual(["18 %", "24 %"]);
 
         expect(r.tramosRecorridos[0].tasaDiaria).toBeCloseTo(0.0005, 9);
-        expect(r.tramosRecorridos[3 - 1].tasaDiaria)
-            .toBeCloseTo(0.30 / 360, 9);
+        expect(r.tramosRecorridos[1].tasaDiaria)
+            .toBeCloseTo(0.24 / 360, 9);
+    });
+
+    /**
+     * La consulta G-7 del paquete canonico cae exactamente sobre el caso
+     * M-2 del enunciado del Proyecto 2: capital en mora de Q725.76 con 45
+     * dias de atraso bajo la politica escalonada da Q18.14.
+     *
+     * Sirve de amarre entre el paquete de datos y el oraculo del P2: si
+     * el plan de amortizacion se corre un mes, esta cifra deja de
+     * coincidir con el enunciado y la prueba lo delata.
+     */
+    it("Reproduce el oraculo M-2 del Proyecto 2: Q18.14", async () => {
+
+        const r = await consultas()
+            .explicarMora("CV-2026-0410", 2, new Date(2027, 0, 24));
+
+        expect(r.total).toBe(18.14);
+
+        expect(
+            POLITICA_ESCALONADA_2026
+                .calcular(Dinero.desde(725.76), 45)
+                .obtenerValor()
+        ).toBe(18.14);
     });
 
     /**
@@ -81,8 +106,10 @@ describe("Explicar una mora - consulta G-7", () => {
         const r = await consultas()
             .explicarMora("CV-2026-0410", 2, new Date(2027, 0, 24));
 
-        expect(r.sumaDeTramosRedondeados).toBe(34.48);
-        expect(r.total).toBe(34.47);
+        // Q10.89 + Q7.26 = Q18.15 sumando lo ya redondeado, contra
+        // Q18.14 del unico redondeo al cerrar el calculo (P2 7.3).
+        expect(r.sumaDeTramosRedondeados).toBe(18.15);
+        expect(r.total).toBe(18.14);
         expect(r.hayDiferenciaPorRedondeo).toBe(true);
     });
 

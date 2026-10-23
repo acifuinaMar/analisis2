@@ -45,9 +45,14 @@ function planDe(c: Credito): PlanAmortizacion {
     return plan;
 }
 
-/** Vencimiento de la cuota n mas los dias de atraso indicados. */
+/**
+ * Vencimiento de la cuota n mas los dias de atraso indicados.
+ *
+ * La cuota n vence n meses despues del desembolso: la primera cierra el
+ * primer periodo de devengo, no el dia de la entrega del capital.
+ */
 function corteConAtraso(numeroCuota: number, diasAtraso: number): Date {
-    return addDays(addMonths(DESEMBOLSO, numeroCuota - 1), diasAtraso);
+    return addDays(addMonths(DESEMBOLSO, numeroCuota), diasAtraso);
 }
 
 /**
@@ -285,7 +290,7 @@ describe("recalcularSaldo - el saldo se deriva, no se sobrescribe (6.9)", () => 
 
         const c = credito();
         const plan = planDe(c);
-        const corte = addDays(addMonths(DESEMBOLSO, 11), 1);
+        const corte = addDays(addMonths(DESEMBOLSO, 12), 1);
 
         plan.aplicarPago(pagoDe(20000, corte), corte);
 
@@ -297,7 +302,7 @@ describe("recalcularSaldo - el saldo se deriva, no se sobrescribe (6.9)", () => 
 
         const c = credito();
         const plan = planDe(c);
-        const corte = addDays(addMonths(DESEMBOLSO, 11), 1);
+        const corte = addDays(addMonths(DESEMBOLSO, 12), 1);
 
         plan.aplicarPago(pagoDe(99999, corte), corte);
 
@@ -321,7 +326,7 @@ describe("actualizarEstado - delega en el patron State (6.7)", () => {
 
         const c = credito();
         const plan = planDe(c);
-        const corte = addDays(addMonths(DESEMBOLSO, 11), 1);
+        const corte = addDays(addMonths(DESEMBOLSO, 12), 1);
 
         plan.aplicarPago(pagoDe(20000, corte), corte);
 

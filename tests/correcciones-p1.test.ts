@@ -41,9 +41,9 @@ function creditoDe(plan: PlanAmortizacion): Credito {
     return (plan as unknown as { credito: Credito }).credito;
 }
 
-/** Corte a N dias del vencimiento de la ultima cuota. */
+/** Corte a N dias del vencimiento de la ultima cuota (la 12). */
 function corteFinal(dias: number): Date {
-    return addDays(addMonths(DESEMBOLSO, 11), dias);
+    return addDays(addMonths(DESEMBOLSO, 12), dias);
 }
 
 describe("CP-04.1 · transicion en_mora -> cancelado", () => {
@@ -124,8 +124,8 @@ describe("CP-04.2 · suspension del devengo de interes corriente", () => {
         const plan = planCon();
         const cuotas = plan.obtenerCuotas();
 
-        const corte90 = addDays(addMonths(DESEMBOLSO, 1), 90);
-        const corte100 = addDays(addMonths(DESEMBOLSO, 1), 100);
+        const corte90 = addDays(addMonths(DESEMBOLSO, 2), 90);
+        const corte100 = addDays(addMonths(DESEMBOLSO, 2), 100);
 
         // Los dias de atraso del credito se pasan explicitos, como los
         // plantea el enunciado: un corte al dia 90 y otro al dia 100.
@@ -145,8 +145,8 @@ describe("CP-04.2 · suspension del devengo de interes corriente", () => {
         const plan = planCon();
         const cuotas = plan.obtenerCuotas();
 
-        const corte90 = addDays(addMonths(DESEMBOLSO, 1), 90);
-        const corte100 = addDays(addMonths(DESEMBOLSO, 1), 100);
+        const corte90 = addDays(addMonths(DESEMBOLSO, 2), 90);
+        const corte100 = addDays(addMonths(DESEMBOLSO, 2), 100);
 
         const suspenso90 = devengo.interesEnSuspenso(cuotas, corte90, 90);
 
@@ -160,7 +160,7 @@ describe("CP-04.2 · suspension del devengo de interes corriente", () => {
 
         const plan = planCon();
         const cuotas = plan.obtenerCuotas();
-        const corte = addDays(addMonths(DESEMBOLSO, 1), 100);
+        const corte = addDays(addMonths(DESEMBOLSO, 2), 100);
 
         const ingreso = devengo.ingresoPorInteresCorriente(cuotas, corte, 100);
         const suspenso = devengo.interesEnSuspenso(cuotas, corte, 100);
@@ -174,7 +174,7 @@ describe("CP-04.2 · suspension del devengo de interes corriente", () => {
 
         const plan = planCon();
         const cuotas = plan.obtenerCuotas();
-        const corte = addDays(addMonths(DESEMBOLSO, 1), 100);
+        const corte = addDays(addMonths(DESEMBOLSO, 2), 100);
 
         const enSuspenso = devengo.interesEnSuspenso(cuotas, corte, 100);
         expect(enSuspenso.esMayorQue(Dinero.cero())).toBe(true);

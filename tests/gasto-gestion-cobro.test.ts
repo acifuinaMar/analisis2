@@ -47,7 +47,7 @@ function planNuevo(): PlanAmortizacion {
 
 /** Fecha de corte a N dias del vencimiento de la cuota 2. */
 function corteCuota2(diasAtraso: number): Date {
-    return addDays(addMonths(DESEMBOLSO, 1), diasAtraso);
+    return addDays(addMonths(DESEMBOLSO, 2), diasAtraso);
 }
 
 describe("Gasto de gestion de cobro - reglas (CP-02, 7.5)", () => {
@@ -266,7 +266,9 @@ describe("Coexistencia: el credito viejo no cambia (CP-03)", () => {
         cuota1.abonar(cuota1.capitalPendiente(), cuota1.interesPendiente());
         plan.recalcularSaldo();
 
-        const corte = addDays(addMonths(new Date(2026, 7, 15), 1), 45);
+        // 45 dias despues del vencimiento de la cuota 2, que vence
+        // dos meses despues del desembolso.
+        const corte = addDays(addMonths(new Date(2026, 7, 15), 2), 45);
         const deuda = plan.deudaDeCuota(2, corte);
 
         // Plana 24 %: Q21.77, contra los Q18.14 de la escalonada.

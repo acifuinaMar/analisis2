@@ -94,7 +94,10 @@ export class PlanAmortizacion {
             );
         }
 
-        const exigibles = this.cuotasExigibles(fechaCorte);
+        // Se cobra sobre las PAGABLES, no sobre las vencidas: la cuota
+        // que vence hoy ya se puede saldar, y al tener cero dias de
+        // atraso no genera mora ni gasto de gestion.
+        const exigibles = this.cuotasPagables(fechaCorte);
 
         // Marcacion del cierre: genera el gasto de gestion de las cuotas
         // que alcanzaron 31 dias. Es idempotente, asi que reejecutar el
@@ -170,6 +173,23 @@ export class PlanAmortizacion {
     public cuotasExigibles(fechaCorte: Date): Cuota[] {
         return this.cuotas
             .filter(cuota => cuota.estaVencida(fechaCorte))
+            .sort((a, b) => a.numero - b.numero);
+    }
+
+    /**
+     * Cuotas COBRABLES a la fecha de corte: las que ya llegaron a su
+     * vencimiento y siguen debiendo algo, incluida la que vence ese mismo
+     * dia.
+     *
+     * Es la lista que se usa para recibir un pago. cuotasExigibles, en
+     * cambio, son las que ya acumulan atraso: esas son las que devengan
+     * mora y clasifican el tramo. La diferencia es exactamente un dia, y
+     * es la que permite que un pago puntual salde su cuota sin cobrarle
+     * mora.
+     */
+    public cuotasPagables(fechaCorte: Date): Cuota[] {
+        return this.cuotas
+            .filter(cuota => cuota.esExigible(fechaCorte))
             .sort((a, b) => a.numero - b.numero);
     }
 

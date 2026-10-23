@@ -284,7 +284,7 @@ function demoRegistroDePago() {
     cuota1.abonar(cuota1.capitalPendiente(), cuota1.interesPendiente());
     plan.recalcularSaldo();
 
-    const fechaCorte = addDays(addMonths(desembolso, 1), 15);
+    const fechaCorte = addDays(addMonths(desembolso, 2), 15);
 
     // Marcacion de mora del cierre: el credito se evalua a la fecha de corte.
     plan.actualizarEstado(fechaCorte);

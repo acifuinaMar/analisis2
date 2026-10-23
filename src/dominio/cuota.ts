@@ -119,10 +119,32 @@ export class Cuota {
     // Vencimiento y atraso
     // ------------------------------------------------------------------
 
-    /** Ya vencio y todavia debe algo a la fecha de corte. */
+    /**
+     * Ya vencio, LLEVA ATRASO y todavia debe algo a la fecha de corte.
+     *
+     * Exige al menos un dia de atraso: el dia del vencimiento la cuota
+     * todavia no esta en mora. Es lo que clasifica el tramo y lo que
+     * dispara el gasto de gestion.
+     */
     public estaVencida(fechaCorte: Date): boolean {
         return !this.estaSaldada()
             && this.diasAtraso(fechaCorte) >= 1;
+    }
+
+    /**
+     * Ya LLEGO su fecha de vencimiento y todavia debe algo.
+     *
+     * Se distingue de estaVencida en el dia del vencimiento: ese dia la
+     * cuota ya es cobrable, pero todavia no devenga mora. Confundir las
+     * dos cosas hacia que un pago puntual no encontrara ninguna cuota que
+     * saldar y se desviara por la via del excedente, que por diseño abona
+     * solo a capital y nunca al interes (6.6.5): el cliente pagaba su
+     * cuota completa, a tiempo, y la cuota quedaba PARCIAL debiendo
+     * justamente su interes.
+     */
+    public esExigible(fechaCorte: Date): boolean {
+        return !this.estaSaldada()
+            && differenceInCalendarDays(fechaCorte, this.fechaVencimiento) >= 0;
     }
 
     /**

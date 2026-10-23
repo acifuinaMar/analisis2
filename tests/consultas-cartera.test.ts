@@ -57,9 +57,11 @@ describe("Consultar un credito (capacidad 1, consulta G-5)", () => {
         const estado = await consultas()
             .consultarCredito("CV-2026-0030", CORTE);
 
-        // 126 dias de atraso caen en el peor tramo.
-        expect(estado.diasAtraso).toBeGreaterThan(90);
-        expect(estado.tramo).toBe(TramoMora.VENCIDO);
+        // Desembolso 27/05/2026 a 6 meses, con las cuotas 1 y 2 pagadas
+        // puntualmente. La cuota 3 vencio el 27/08/2026, asi que al corte
+        // lleva 65 dias: tercer tramo.
+        expect(estado.diasAtraso).toBe(65);
+        expect(estado.tramo).toBe(TramoMora.MORA_3);
     });
 
     it("El saldo nunca supera el capital desembolsado", async () => {
@@ -211,7 +213,10 @@ describe("La reconstruccion reproduce los pagos registrados", () => {
 
         // Una cuota saldada no acumula atraso (P1 6.5), asi que no puede
         // estar en los dos conteos a la vez.
-        expect(estado.cuotasPagadas).toBe(1);
-        expect(estado.cuotasVencidas).toBe(5);
+        // Los dos pagos de Q184.60 llegaron en la fecha exacta de
+        // vencimiento y saldaron las cuotas 1 y 2 completas. Vencidas
+        // quedan la 3, la 4 y la 5; la 6 todavia no vence.
+        expect(estado.cuotasPagadas).toBe(2);
+        expect(estado.cuotasVencidas).toBe(3);
     });
 });
