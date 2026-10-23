@@ -76,6 +76,8 @@ describe("Servidor MCP - herramientas expuestas", () => {
         expect(nombres).toContain("listar_creditos_en_mora");
         expect(nombres).toContain("proximos_vencimientos");
         expect(nombres).toContain("consultar_cartera");
+        expect(nombres).toContain("consultar_cierre_diario");
+        expect(nombres).toContain("consultar_cierre_mensual");
     });
 
     it("Cada herramienta declara su esquema de entrada", async () => {
@@ -87,12 +89,19 @@ describe("Servidor MCP - herramientas expuestas", () => {
             expect(herramienta.inputSchema).toBeDefined();
             expect(herramienta.description).toBeTruthy();
 
-            // Toda herramienta recibe la fecha de corte como parametro.
+            // Toda herramienta recibe el momento del calculo como
+            // parametro: una fecha de corte, o un periodo AAAA-MM en el
+            // caso del cierre mensual. Ninguna lo deduce del reloj del
+            // sistema, que es el puerto Reloj del Proyecto 1.
             const propiedades = Object.keys(
                 (herramienta.inputSchema as { properties?: object })
                     .properties ?? {}
             );
-            expect(propiedades).toContain("fechaCorte");
+
+            expect(
+                propiedades.includes("fechaCorte")
+                || propiedades.includes("periodo")
+            ).toBe(true);
         }
     });
 });
@@ -491,4 +500,103 @@ describe("Servidor MCP - consultar_cartera (G-1)", () => {
 
         expect(cartera.carteraEnMora).toBe(listado.saldoCapitalTotal);
     });
+});
+
+
+describe("Servidor MCP - consultar_cierre (G-2 y G-3)", () => {
+
+    it("El cierre mensual de octubre trae los conceptos", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "consultar_cierre_mensual", {
+            periodo: "2026-10"
+        });
+
+        expect(r.id).toBe("CIE-2026-10");
+        expect(r.desde).toBe("2026-10-01");
+        expect(r.hasta).toBe("2026-10-31");
+        expect(r.flujoNeto).toBe(-4445.50);
+
+        const desembolsos = r.desembolsos as Record<string, unknown>;
+        expect(desembolsos.cantidad).toBe(10);
+        expect(desembolsos.monto).toBe(41000);
+
+        const recuperaciones = r.recuperaciones as Record<string, unknown>;
+        expect(recuperaciones.interesMoratorio).toBe(16.93);
+        expect(recuperaciones.interesCorriente).toBe(7162.89);
+        expect(recuperaciones.capital).toBe(29374.68);
+        expect(recuperaciones.total).toBe(36554.50);
+    });
+
+    /**
+     * El 31 de octubre no hubo movimiento. El cierre en ceros es la
+     * respuesta correcta, y el asistente debe poder distinguirla de un
+     * error: por eso trae las cantidades y no solo los montos.
+     */
+    it("El cierre diario del 31 de octubre viene en ceros", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "consultar_cierre_diario", {
+            fechaCorte: CORTE
+        });
+
+        expect(r.id).toBe("CIE-2026-10-31");
+        expect(r.error).toBeUndefined();
+        expect((r.pagos as Record<string, unknown>).cantidad).toBe(0);
+        expect((r.recuperaciones as Record<string, unknown>).total).toBe(0);
+    });
+
+    it("Reejecutar el cierre no cambia el resultado", async () => {
+
+        const cliente = await clienteConectado();
+
+        const a = await invocar(cliente, "consultar_cierre_mensual", {
+            periodo: "2026-10"
+        });
+        const b = await invocar(cliente, "consultar_cierre_mensual", {
+            periodo: "2026-10"
+        });
+
+        expect(b).toEqual(a);
+    });
+
+    it("Rechaza un periodo que no es AAAA-MM", async () => {
+
+        const cliente = await clienteConectado();
+
+        for (const periodo of ["2026-13", "octubre", "2026-10-31"]) {
+
+            const respuesta = await cliente.callTool({
+                name: "consultar_cierre_mensual",
+                arguments: { periodo }
+            });
+
+            expect(respuesta.isError).toBe(true);
+        }
+    });
+
+    /**
+     * El cierre mensual recibe un periodo y el diario una fecha, pero
+     * ninguno acepta que se los omita: el momento del calculo siempre
+     * llega como parametro y nunca sale del reloj.
+     */
+    it("Ninguno de los dos cierres asume el mes o el dia actual",
+        async () => {
+
+            const cliente = await clienteConectado();
+
+            for (const name of [
+                "consultar_cierre_mensual",
+                "consultar_cierre_diario"
+            ]) {
+                const respuesta = await cliente.callTool({
+                    name,
+                    arguments: {}
+                });
+
+                expect(respuesta.isError).toBe(true);
+            }
+        });
 });

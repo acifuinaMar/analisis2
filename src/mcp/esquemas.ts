@@ -159,6 +159,40 @@ export const ConsultarCarteraEntrada = z.object({
     fechaCorte: FechaCorteEsquema
 });
 
+/**
+ * Periodo mensual en formato AAAA-MM.
+ *
+ * El cierre mensual recibe el periodo como parametro, igual que el diario
+ * recibe la fecha de corte: el nucleo nunca deduce "el mes actual" del
+ * reloj del sistema.
+ */
+export const PeriodoEsquema = z
+    .string()
+    .regex(
+        /^\d{4}-(0[1-9]|1[0-2])$/,
+        "El periodo debe venir en formato AAAA-MM, por ejemplo 2026-10."
+    )
+    .describe(
+        "Mes del cierre en formato AAAA-MM, por ejemplo 2026-10. "
+        + "Obligatorio: el sistema nunca asume el mes actual."
+    );
+
+export const cierreDiarioForma: ZodRawShape = {
+    fechaCorte: FechaCorteEsquema
+};
+
+export const CierreDiarioEntrada = z.object({
+    fechaCorte: FechaCorteEsquema
+});
+
+export const cierreMensualForma: ZodRawShape = {
+    periodo: PeriodoEsquema
+};
+
+export const CierreMensualEntrada = z.object({
+    periodo: PeriodoEsquema
+});
+
 export type ConsultarCreditoEntrada =
     z.infer<typeof ConsultarCreditoEntrada>;
 

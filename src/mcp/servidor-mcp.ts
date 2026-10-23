@@ -7,6 +7,8 @@ import {
     ErrorConsulta
 } from "../servicios/consultas-cartera";
 import {
+    CierreDiarioEntrada,
+    CierreMensualEntrada,
     ConsultarCarteraEntrada,
     ConsultarCreditoEntrada,
     CreditosEnMoraEntrada,
@@ -14,6 +16,8 @@ import {
     ExplicarMoraEntrada,
     ProximosVencimientosEntrada,
     aFechaCorte,
+    cierreDiarioForma,
+    cierreMensualForma,
     consultarCarteraForma,
     consultarCreditoForma,
     creditosEnMoraForma,
@@ -341,6 +345,68 @@ export function crearServidorMcp(
 
                 return comoContenido(
                     await consultas.consultarCartera(aFechaCorte(fechaCorte))
+                );
+            } catch (error) {
+                return comoContenido(aErrorHerramienta(error));
+            }
+        }
+    );
+
+    // ------------------------------------------------------------------
+    // Capacidad 7 · Consultar un cierre (G-2 y G-3)
+    // ------------------------------------------------------------------
+    //
+    // Se exponen como DOS herramientas en vez de una con un parametro
+    // "tipo", porque cada una recibe algo distinto —una fecha o un mes— y
+    // un solo campo que cambia de formato segun otro campo es la clase de
+    // firma que el asistente llena mal.
+
+    registrar(
+        "consultar_cierre_diario",
+        {
+            title: "Consultar el cierre de un dia",
+            description:
+                "Devuelve el cierre de un dia: desembolsos del dia y "
+                + "recuperaciones desglosadas por concepto en el orden de "
+                + "la prelacion (gastos, interes moratorio, interes "
+                + "corriente, capital y excedente), con el flujo neto. "
+                + "Es idempotente: pedirlo dos veces da lo mismo y no "
+                + "duplica movimientos. Solo lectura.",
+            inputSchema: cierreDiarioForma
+        },
+        async (argumentos) => {
+            try {
+                const { fechaCorte } =
+                    CierreDiarioEntrada.parse(argumentos);
+
+                return comoContenido(
+                    await consultas.consultarCierreDiario(
+                        aFechaCorte(fechaCorte)
+                    )
+                );
+            } catch (error) {
+                return comoContenido(aErrorHerramienta(error));
+            }
+        }
+    );
+
+    registrar(
+        "consultar_cierre_mensual",
+        {
+            title: "Consultar el cierre de un mes",
+            description:
+                "Devuelve el cierre de un mes completo (periodo AAAA-MM): "
+                + "desembolsos del periodo y recuperaciones desglosadas "
+                + "por concepto en el orden de la prelacion, con el flujo "
+                + "neto. Es idempotente. Solo lectura.",
+            inputSchema: cierreMensualForma
+        },
+        async (argumentos) => {
+            try {
+                const { periodo } = CierreMensualEntrada.parse(argumentos);
+
+                return comoContenido(
+                    await consultas.consultarCierreMensual(periodo)
                 );
             } catch (error) {
                 return comoContenido(aErrorHerramienta(error));

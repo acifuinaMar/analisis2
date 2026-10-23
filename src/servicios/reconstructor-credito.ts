@@ -1,3 +1,4 @@
+import { AplicacionPago } from "../dominio/aplicacion-pago";
 import { Credito } from "../dominio/credito";
 import { PlanAmortizacion } from "../dominio/plan-amortizacion";
 import {
@@ -24,6 +25,22 @@ import { CalculoFrances } from "../estrategias/calculo-frances";
  * movimientos (regla de mayor, P1 6.9). Asi cualquier cifra del cierre se
  * puede auditar meses despues reproduciendo la bitacora.
  */
+/**
+ * Un pago reproducido, junto con el desglose de como se imputo.
+ *
+ * El cierre por periodo necesita saber a QUE se aplico cada pago —gasto,
+ * mora, interes, capital— y eso solo lo sabe la cadena de prelacion en el
+ * momento de aplicarlo. Reconstruirlo despues seria repetir la formula, y
+ * dos formulas de lo mismo siempre divergen.
+ */
+export interface PagoAplicado {
+
+    readonly pago: PagoRegistrado;
+
+    readonly aplicacion: AplicacionPago;
+
+}
+
 export interface CreditoVivo {
 
     readonly credito: Credito;
@@ -31,6 +48,9 @@ export interface CreditoVivo {
     readonly plan: PlanAmortizacion;
 
     readonly registro: CreditoRegistrado;
+
+    /** Los pagos reproducidos, en orden cronologico, con su imputacion. */
+    readonly aplicaciones: ReadonlyArray<PagoAplicado>;
 
 }
 
@@ -64,8 +84,11 @@ export class ReconstructorCredito {
         const enOrden = [...pagos]
             .sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
 
+        const aplicaciones: PagoAplicado[] = [];
+
         for (const pago of enOrden) {
-            plan.aplicarPago(
+
+            const aplicacion = plan.aplicarPago(
                 {
                     monto: pago.monto,
                     fecha: pago.fecha,
@@ -74,9 +97,11 @@ export class ReconstructorCredito {
                 },
                 pago.fecha
             );
+
+            aplicaciones.push({ pago, aplicacion });
         }
 
-        return { credito, plan, registro };
+        return { credito, plan, registro, aplicaciones };
     }
 
     /**

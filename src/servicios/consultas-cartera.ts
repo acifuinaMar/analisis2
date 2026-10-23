@@ -1,4 +1,8 @@
-import { addDays, differenceInCalendarDays } from "date-fns";
+import {
+    addDays,
+    differenceInCalendarDays,
+    endOfMonth
+} from "date-fns";
 
 import { Dinero } from "../dominio/dinero";
 import { NombreEstado } from "../dominio/nombre-estado";
@@ -321,6 +325,73 @@ export interface EstadoCartera {
     readonly saldoCandidatosAIncobrable: number;
 
     readonly desglosePorTramo: ReadonlyArray<FilaRiesgo>;
+
+}
+
+export type TipoCierre = "diario" | "mensual";
+
+/**
+ * Recuperaciones desglosadas por concepto, en el orden de la prelacion
+ * (P1 6.6.2): primero gastos, luego mora, luego interes corriente y al
+ * final capital.
+ *
+ * El excedente va aparte porque no lo coloca la prelacion sino la
+ * politica de adelanto, que lo abona al capital de cuotas futuras sin
+ * pagar sus intereses (P1 6.6.5). Es recuperacion de capital, pero de
+ * otra naturaleza, y el cierre debe poder distinguirlas.
+ *
+ * Las cinco lineas suman siempre el total recibido: nada se pierde.
+ */
+export interface RecuperacionesPorConcepto {
+
+    readonly gastos: number;
+
+    readonly interesMoratorio: number;
+
+    readonly interesCorriente: number;
+
+    readonly capital: number;
+
+    readonly excedenteACapital: number;
+
+    readonly total: number;
+
+}
+
+export interface MovimientoCierre {
+
+    readonly cantidad: number;
+
+    readonly monto: number;
+
+}
+
+export interface Cierre {
+
+    /** CIE-2026-10-31 para el diario, CIE-2026-10 para el mensual. */
+    readonly id: string;
+
+    readonly tipo: TipoCierre;
+
+    readonly desde: string;
+
+    readonly hasta: string;
+
+    readonly desembolsos: MovimientoCierre;
+
+    readonly pagos: MovimientoCierre;
+
+    readonly recuperaciones: RecuperacionesPorConcepto;
+
+    /**
+     * Flujo neto del periodo: lo recuperado menos lo desembolsado.
+     *
+     * Es el unico campo que puede ser NEGATIVO, y por eso no es un
+     * Dinero: un importe nunca es negativo, pero un flujo si. Negativo
+     * significa que se presto mas de lo que entro, que es lo normal en un
+     * mes de crecimiento.
+     */
+    readonly flujoNeto: number;
 
 }
 
@@ -726,6 +797,149 @@ export class ConsultasCartera {
         };
     }
 
+    /**
+     * Capacidad 7a: consultar el cierre de un dia.
+     *
+     * Ejercita G-3: "Dame el cierre del 31 de octubre de 2026."
+     */
+    public async consultarCierreDiario(fecha: Date): Promise<Cierre> {
+
+        return this.armarCierre(
+            "diario",
+            `CIE-${aTexto(fecha)}`,
+            fecha,
+            fecha
+        );
+    }
+
+    /**
+     * Capacidad 7b: consultar el cierre de un mes.
+     *
+     * Ejercita G-2: "Dame el cierre mensual de octubre de 2026:
+     * desembolsos y recuperaciones por concepto."
+     *
+     * El periodo llega como AAAA-MM. El ultimo dia se calcula con
+     * date-fns y no a mano, por la misma razon que el resto del nucleo:
+     * la aritmetica de fechas nativa se equivoca en los fines de mes.
+     */
+    public async consultarCierreMensual(periodo: string): Promise<Cierre> {
+
+        if (!/^\d{4}-\d{2}$/.test(periodo)) {
+            throw new ErrorConsulta(
+                "PERIODO_INVALIDO",
+                `El periodo ${periodo} debe venir en formato AAAA-MM.`
+            );
+        }
+
+        const [anio, mes] = periodo.split("-").map(Number);
+
+        if (mes < 1 || mes > 12) {
+            throw new ErrorConsulta(
+                "PERIODO_INVALIDO",
+                `El mes ${mes} no existe.`
+            );
+        }
+
+        const primero = new Date(anio, mes - 1, 1);
+
+        return this.armarCierre(
+            "mensual",
+            `CIE-${periodo}`,
+            primero,
+            endOfMonth(primero)
+        );
+    }
+
+    /**
+     * Arma el cierre de un rango de fechas, ambos extremos incluidos.
+     *
+     * IDEMPOTENTE por construccion (P1 6.9): no acumula ni escribe nada,
+     * reconstruye el periodo a partir de la bitacora de eventos. Pedir el
+     * mismo cierre dos veces da el mismo resultado y no duplica
+     * movimientos, que es justo lo que el enunciado exige del cierre.
+     *
+     * Las recuperaciones salen del desglose con que la prelacion imputo
+     * cada pago en su momento, no de volver a repartir los montos ahora:
+     * la mora de un pago de julio se calculo en julio.
+     */
+    private async armarCierre(
+        tipo: TipoCierre,
+        id: string,
+        desde: Date,
+        hasta: Date
+    ): Promise<Cierre> {
+
+        const cartera = await this.recorrerCartera(hasta);
+
+        let desembolsado = Dinero.cero();
+        let cuantosDesembolsos = 0;
+
+        let gastos = Dinero.cero();
+        let mora = Dinero.cero();
+        let corriente = Dinero.cero();
+        let capital = Dinero.cero();
+        let excedente = Dinero.cero();
+        let recibido = Dinero.cero();
+        let cuantosPagos = 0;
+
+        for (const credito of cartera) {
+
+            const { registro, aplicaciones } = credito.vivo;
+
+            if (enRango(registro.fechaDesembolso, desde, hasta)) {
+                cuantosDesembolsos++;
+                desembolsado = desembolsado.sumar(registro.capital);
+            }
+
+            for (const { pago, aplicacion } of aplicaciones) {
+
+                if (!enRango(pago.fecha, desde, hasta)) {
+                    continue;
+                }
+
+                cuantosPagos++;
+                recibido = recibido.sumar(pago.monto);
+
+                gastos = gastos.sumar(aplicacion.gastos);
+                mora = mora.sumar(aplicacion.interesMoratorio);
+                corriente = corriente.sumar(aplicacion.interesCorriente);
+                capital = capital.sumar(aplicacion.capital);
+                excedente = excedente.sumar(aplicacion.excedente);
+            }
+        }
+
+        return {
+            id,
+            tipo,
+            desde: aTexto(desde),
+            hasta: aTexto(hasta),
+            desembolsos: {
+                cantidad: cuantosDesembolsos,
+                monto: desembolsado.obtenerValor()
+            },
+            pagos: {
+                cantidad: cuantosPagos,
+                monto: recibido.obtenerValor()
+            },
+            recuperaciones: {
+                gastos: gastos.obtenerValor(),
+                interesMoratorio: mora.obtenerValor(),
+                interesCorriente: corriente.obtenerValor(),
+                capital: capital.obtenerValor(),
+                excedenteACapital: excedente.obtenerValor(),
+                total: recibido.obtenerValor()
+            },
+            // Dinero modela un IMPORTE, que nunca es negativo, y aqui
+            // hace falta una magnitud con SIGNO: en un mes de crecimiento
+            // se presta mas de lo que entra. La resta se hace sobre
+            // centavos enteros, que son exactos, y solo al final se pasa a
+            // quetzales para el contrato.
+            flujoNeto:
+                (recibido.obtenerCentavos()
+                    - desembolsado.obtenerCentavos()) / 100
+        };
+    }
+
     // ------------------------------------------------------------------
 
     /**
@@ -798,6 +1012,17 @@ export class ConsultasCartera {
 
 function redondear(valor: number): number {
     return Math.round(Number(valor.toPrecision(12)) * 100) / 100;
+}
+
+/**
+ * Si una fecha cae dentro del rango, con ambos extremos incluidos.
+ *
+ * Se compara por dias calendario y no por milisegundos: un pago del 31 de
+ * octubre pertenece al cierre de octubre sin importar la hora.
+ */
+function enRango(fecha: Date, desde: Date, hasta: Date): boolean {
+    return differenceInCalendarDays(fecha, desde) >= 0
+        && differenceInCalendarDays(hasta, fecha) >= 0;
 }
 
 /** Las fechas salen en AAAA-MM-DD, el mismo formato del paquete. */
