@@ -7,15 +7,19 @@ import {
     ErrorConsulta
 } from "../servicios/consultas-cartera";
 import {
+    ConsultarCarteraEntrada,
     ConsultarCreditoEntrada,
     CreditosEnMoraEntrada,
     DeudaDeCuotaEntrada,
     ExplicarMoraEntrada,
+    ProximosVencimientosEntrada,
     aFechaCorte,
+    consultarCarteraForma,
     consultarCreditoForma,
     creditosEnMoraForma,
     deudaDeCuotaForma,
-    explicarMoraForma
+    explicarMoraForma,
+    proximosVencimientosForma
 } from "./esquemas";
 
 /**
@@ -271,6 +275,72 @@ export function crearServidorMcp(
                         aFechaCorte(fechaCorte),
                         tramo
                     )
+                );
+            } catch (error) {
+                return comoContenido(aErrorHerramienta(error));
+            }
+        }
+    );
+
+    // ------------------------------------------------------------------
+    // Capacidad 5 · Proximos vencimientos (G-6)
+    // ------------------------------------------------------------------
+
+    registrar(
+        "proximos_vencimientos",
+        {
+            title: "Ver proximos vencimientos",
+            description:
+                "Lista las cuotas que vencen dentro de una ventana de dias "
+                + "contada desde la fecha de corte, con el cliente, el "
+                + "numero de cuota, la fecha, los dias que faltan y el "
+                + "monto. Devuelve el total de cuotas y el monto esperado. "
+                + "La ventana no incluye el dia del corte. Solo lectura.",
+            inputSchema: proximosVencimientosForma
+        },
+        async (argumentos) => {
+            try {
+                const { fechaCorte, ventanaDias } =
+                    ProximosVencimientosEntrada.parse(argumentos);
+
+                return comoContenido(
+                    await consultas.proximosVencimientos(
+                        aFechaCorte(fechaCorte),
+                        ventanaDias
+                    )
+                );
+            } catch (error) {
+                return comoContenido(aErrorHerramienta(error));
+            }
+        }
+    );
+
+    // ------------------------------------------------------------------
+    // Capacidad 6 · Consultar la cartera (G-1)
+    // ------------------------------------------------------------------
+
+    registrar(
+        "consultar_cartera",
+        {
+            title: "Consultar la cartera",
+            description:
+                "Devuelve el estado de la cartera a una fecha de corte: "
+                + "cartera activa, cartera en mora, cartera en riesgo con "
+                + "su desglose por tramo, y lo dado por incobrable. La "
+                + "mora y el riesgo son indicadores distintos y vienen por "
+                + "separado. Incluye los creditos que ya superan los 120 "
+                + "dias y aun no se dan de baja, porque declararlos "
+                + "mejoraria el porcentaje en riesgo sin haber cobrado "
+                + "nada. Solo lectura.",
+            inputSchema: consultarCarteraForma
+        },
+        async (argumentos) => {
+            try {
+                const { fechaCorte } =
+                    ConsultarCarteraEntrada.parse(argumentos);
+
+                return comoContenido(
+                    await consultas.consultarCartera(aFechaCorte(fechaCorte))
                 );
             } catch (error) {
                 return comoContenido(aErrorHerramienta(error));

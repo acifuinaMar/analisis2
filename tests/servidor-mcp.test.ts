@@ -74,6 +74,8 @@ describe("Servidor MCP - herramientas expuestas", () => {
         expect(nombres).toContain("calcular_deuda_de_cuota");
         expect(nombres).toContain("explicar_mora");
         expect(nombres).toContain("listar_creditos_en_mora");
+        expect(nombres).toContain("proximos_vencimientos");
+        expect(nombres).toContain("consultar_cartera");
     });
 
     it("Cada herramienta declara su esquema de entrada", async () => {
@@ -373,5 +375,120 @@ describe("Servidor MCP - listar_creditos_en_mora (G-4)", () => {
         expect(detalle.diasAtraso).toBe(linea.diasAtraso);
         expect(detalle.tramo).toBe(linea.tramo);
         expect(detalle.saldoCapital).toBe(linea.saldoCapital);
+    });
+});
+
+
+describe("Servidor MCP - proximos_vencimientos (G-6)", () => {
+
+    it("Responde las dos ventanas que pide la gerencia", async () => {
+
+        const cliente = await clienteConectado();
+
+        const siete = await invocar(cliente, "proximos_vencimientos", {
+            fechaCorte: CORTE,
+            ventanaDias: 7
+        });
+
+        expect(siete.hasta).toBe("2026-11-07");
+        expect(siete.cantidadCuotas).toBe(10);
+        expect(siete.montoTotal).toBe(7001.31);
+
+        const treinta = await invocar(cliente, "proximos_vencimientos", {
+            fechaCorte: CORTE,
+            ventanaDias: 30
+        });
+
+        expect(treinta.hasta).toBe("2026-11-30");
+        expect(treinta.cantidadCuotas).toBe(65);
+        expect(treinta.montoTotal).toBe(45960.55);
+    });
+
+    it("La ventana es obligatoria", async () => {
+
+        const cliente = await clienteConectado();
+
+        const respuesta = await cliente.callTool({
+            name: "proximos_vencimientos",
+            arguments: { fechaCorte: CORTE }
+        });
+
+        expect(respuesta.isError).toBe(true);
+    });
+
+    it("Rechaza ventanas fuera de rango", async () => {
+
+        const cliente = await clienteConectado();
+
+        for (const ventanaDias of [0, 366, 7.5]) {
+
+            const respuesta = await cliente.callTool({
+                name: "proximos_vencimientos",
+                arguments: { fechaCorte: CORTE, ventanaDias }
+            });
+
+            expect(respuesta.isError).toBe(true);
+        }
+    });
+});
+
+describe("Servidor MCP - consultar_cartera (G-1)", () => {
+
+    it("Responde el tablero gerencial al corte", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "consultar_cartera", {
+            fechaCorte: CORTE
+        });
+
+        expect(r.fechaCorte).toBe("2026-10-31");
+        expect(r.carteraActiva).toBe(299939.82);
+        expect(r.carteraEnMora).toBe(48715.17);
+        expect(r.montoEnRiesgo).toBe(37841.71);
+        expect(r.dadoPorIncobrable).toBe(0);
+        expect(r.candidatosAIncobrable).toBe(2);
+    });
+
+    it("Trae el desglose por tramo, no solo el agregado", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "consultar_cartera", {
+            fechaCorte: CORTE
+        });
+
+        const desglose = r.desglosePorTramo as Array<
+            Record<string, unknown>
+        >;
+
+        expect(desglose).toHaveLength(5);
+        expect(desglose.map(f => f.categoria)).toEqual([
+            "mora_1",
+            "mora_2",
+            "mora_3",
+            "vencido",
+            "reestructurado_al_dia"
+        ]);
+    });
+
+    /**
+     * G-1 y G-4 son de doble verificacion. Se comprueba atravesando el
+     * protocolo, que es como las va a consumir el asistente: si el
+     * tablero y su detalle no cuadran, el chat se contradice.
+     */
+    it("El tablero cuadra con el listado de morosos", async () => {
+
+        const cliente = await clienteConectado();
+
+        const cartera = await invocar(cliente, "consultar_cartera", {
+            fechaCorte: CORTE
+        });
+
+        const listado = await invocar(cliente, "listar_creditos_en_mora", {
+            fechaCorte: CORTE
+        });
+
+        expect(cartera.carteraEnMora).toBe(listado.saldoCapitalTotal);
     });
 });

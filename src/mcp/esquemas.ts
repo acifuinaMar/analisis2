@@ -123,6 +123,42 @@ export const CreditosEnMoraEntrada = z.object({
     tramo: TramoEnMoraEsquema.optional()
 });
 
+/**
+ * Ventana de dias hacia adelante para los proximos vencimientos.
+ *
+ * Se acota a 365 dias: mas alla de un año la pregunta deja de ser
+ * "que vence pronto" y pasa a ser el plan de amortizacion completo, que
+ * ya tiene su propia consulta.
+ */
+const VentanaDiasEsquema = z
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .describe(
+        "Cantidad de dias hacia adelante desde la fecha de corte, de 1 a "
+        + "365. La ventana no incluye el dia del corte: una cuota que "
+        + "vence hoy ya es exigible y no es un vencimiento proximo."
+    );
+
+export const proximosVencimientosForma: ZodRawShape = {
+    fechaCorte: FechaCorteEsquema,
+    ventanaDias: VentanaDiasEsquema
+};
+
+export const ProximosVencimientosEntrada = z.object({
+    fechaCorte: FechaCorteEsquema,
+    ventanaDias: VentanaDiasEsquema
+});
+
+export const consultarCarteraForma: ZodRawShape = {
+    fechaCorte: FechaCorteEsquema
+};
+
+export const ConsultarCarteraEntrada = z.object({
+    fechaCorte: FechaCorteEsquema
+});
+
 export type ConsultarCreditoEntrada =
     z.infer<typeof ConsultarCreditoEntrada>;
 

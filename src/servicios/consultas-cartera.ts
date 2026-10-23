@@ -1,3 +1,5 @@
+import { addDays, differenceInCalendarDays } from "date-fns";
+
 import { Dinero } from "../dominio/dinero";
 import { NombreEstado } from "../dominio/nombre-estado";
 import { RepositorioCartera } from "../dominio/repositorio-cartera";
@@ -5,6 +7,8 @@ import { ClasificadorTramoMora, TramoMora } from "../dominio/tramo-mora";
 import {
     CatalogoPoliticasMora
 } from "../dominio/politica-mora/catalogo-politicas";
+import { PosicionCartera } from "../dominio/posicion-cartera";
+import { Cartera } from "./cartera";
 import {
     CreditoVivo,
     ReconstructorCredito
@@ -214,6 +218,109 @@ interface CreditoAlCorte {
     readonly diasAtraso: number;
 
     readonly tramo: TramoMora;
+
+    /**
+     * Foto del credito para medir la calidad de la cartera (P1 6.8). Se
+     * arma en el recorrido y no en cada capacidad para que "cartera
+     * activa" tenga una sola definicion, la del dominio.
+     */
+    readonly posicion: PosicionCartera;
+
+}
+
+/** Una cuota que esta por vencer dentro de la ventana consultada. */
+export interface CuotaPorVencer {
+
+    readonly idCredito: string;
+
+    readonly idCliente: string;
+
+    readonly nombreCliente: string;
+
+    readonly numeroCuota: number;
+
+    readonly fechaVencimiento: string;
+
+    readonly diasParaVencer: number;
+
+    /** Monto programado de la cuota en el plan. */
+    readonly montoCuota: number;
+
+    /**
+     * Lo que realmente falta cobrar de esa cuota. Normalmente es igual al
+     * monto programado, pero puede ser menor si un excedente anterior ya
+     * abono a su capital (P1 6.6.5).
+     */
+    readonly montoPendiente: number;
+
+}
+
+export interface ProximosVencimientos {
+
+    readonly fechaCorte: string;
+
+    readonly ventanaDias: number;
+
+    /** Ultimo dia incluido en la ventana. */
+    readonly hasta: string;
+
+    readonly cantidadCuotas: number;
+
+    readonly creditosInvolucrados: number;
+
+    /** Suma de lo pendiente: el efectivo que se espera recibir. */
+    readonly montoTotal: number;
+
+    readonly cuotas: ReadonlyArray<CuotaPorVencer>;
+
+}
+
+/** Una fila del desglose de la cartera en riesgo por tramo (P2 7.8). */
+export interface FilaRiesgo {
+
+    readonly categoria: string;
+
+    readonly creditos: number;
+
+    readonly saldo: number;
+
+    /** Proporcion sobre la cartera activa, entre 0 y 1. */
+    readonly porcentaje: number;
+
+}
+
+export interface EstadoCartera {
+
+    readonly fechaCorte: string;
+
+    readonly creditosActivos: number;
+
+    readonly carteraActiva: number;
+
+    readonly carteraEnMora: number;
+
+    readonly porcentajeEnMora: number;
+
+    readonly montoEnRiesgo: number;
+
+    readonly porcentajeEnRiesgo: number;
+
+    readonly dadoPorIncobrable: number;
+
+    /**
+     * Creditos que ya superan los 120 dias y todavia no se han dado de
+     * baja (P1 6.7).
+     *
+     * Va en el reporte porque declarar incobrable MEJORA el porcentaje en
+     * riesgo sin haber cobrado nada: el credito malo sale de las dos
+     * sumas (P1 6.8). Si el gerente no ve cuanto esta pendiente de dar de
+     * baja, no puede leer el indicador.
+     */
+    readonly candidatosAIncobrable: number;
+
+    readonly saldoCandidatosAIncobrable: number;
+
+    readonly desglosePorTramo: ReadonlyArray<FilaRiesgo>;
 
 }
 
@@ -457,6 +564,168 @@ export class ConsultasCartera {
         };
     }
 
+    /**
+     * Capacidad 5: ver proximos vencimientos.
+     *
+     * Devuelve las cuotas que vencen dentro de una ventana de dias, con
+     * el total de cuotas y de monto. Ejercita G-6: "¿Que cuotas vencen en
+     * los proximos 7 dias desde el 31 de octubre de 2026? ¿Y en los
+     * proximos 30?"
+     *
+     * La ventana es (corte, corte + dias]: deja fuera la cuota que vence
+     * el dia del corte, porque esa ya es exigible hoy y pertenece al
+     * cobro del dia, no a lo que viene. Tambien deja fuera los creditos
+     * cancelados e incobrables: no tienen vencimientos que atender.
+     */
+    public async proximosVencimientos(
+        fechaCorte: Date,
+        ventanaDias: number
+    ): Promise<ProximosVencimientos> {
+
+        if (!Number.isInteger(ventanaDias) || ventanaDias < 1) {
+            throw new ErrorConsulta(
+                "VENTANA_INVALIDA",
+                "La ventana de dias debe ser un entero mayor o igual a 1."
+            );
+        }
+
+        const hasta = addDays(fechaCorte, ventanaDias);
+
+        const cartera = await this.recorrerCartera(fechaCorte);
+
+        const cuotas: CuotaPorVencer[] = [];
+        const creditos = new Set<string>();
+
+        let total = Dinero.cero();
+
+        for (const credito of cartera) {
+
+            if (!credito.posicion.estaActiva()) {
+                continue;
+            }
+
+            const { registro, plan } = credito.vivo;
+
+            let cliente: string | undefined;
+
+            for (const cuota of plan.obtenerCuotas()) {
+
+                if (cuota.estaSaldada()) {
+                    continue;
+                }
+
+                const dias = differenceInCalendarDays(
+                    cuota.fechaVencimiento,
+                    fechaCorte
+                );
+
+                if (dias < 1 || dias > ventanaDias) {
+                    continue;
+                }
+
+                if (cliente === undefined) {
+                    cliente = (
+                        await this.repositorio.obtenerCliente(
+                            registro.idCliente
+                        )
+                    )?.nombreCompleto ?? "(desconocido)";
+                }
+
+                const pendiente = cuota.totalPendiente();
+                total = total.sumar(pendiente);
+
+                creditos.add(registro.idCredito);
+
+                cuotas.push({
+                    idCredito: registro.idCredito,
+                    idCliente: registro.idCliente,
+                    nombreCliente: cliente,
+                    numeroCuota: cuota.numero,
+                    fechaVencimiento: aTexto(cuota.fechaVencimiento),
+                    diasParaVencer: dias,
+                    montoCuota: cuota.monto.obtenerValor(),
+                    montoPendiente: pendiente.obtenerValor()
+                });
+            }
+        }
+
+        // Del vencimiento mas proximo al mas lejano: es el orden en que
+        // el asesor llama a los clientes.
+        cuotas.sort(
+            (a, b) => a.diasParaVencer - b.diasParaVencer
+                || a.idCredito.localeCompare(b.idCredito)
+        );
+
+        return {
+            fechaCorte: aTexto(fechaCorte),
+            ventanaDias,
+            hasta: aTexto(hasta),
+            cantidadCuotas: cuotas.length,
+            creditosInvolucrados: creditos.size,
+            montoTotal: total.obtenerValor(),
+            cuotas
+        };
+    }
+
+    /**
+     * Capacidad 6: consultar la cartera.
+     *
+     * Devuelve cartera activa, en mora, en riesgo con su desglose por
+     * tramo, y lo dado por incobrable. Ejercita G-1: "¿Como esta la
+     * cartera al 31 de octubre de 2026?"
+     *
+     * No calcula nada: arma las posiciones y deja que Cartera (P1 6.8,
+     * P2 7.8) produzca el reporte. El tablero gerencial CONSUME este
+     * desglose; si lo recalculara habria dos fuentes de verdad para la
+     * misma cifra, y dos fuentes de verdad siempre divergen.
+     *
+     * Mora y riesgo son indicadores DISTINTOS y se devuelven por
+     * separado: la mora es operativa —quien no pago a tiempo— y el riesgo
+     * es estrategico —quien probablemente no pague—. Rotularlos igual es
+     * el error que el P2 clasifica como catastrofico.
+     */
+    public async consultarCartera(
+        fechaCorte: Date
+    ): Promise<EstadoCartera> {
+
+        const cartera = await this.recorrerCartera(fechaCorte);
+
+        const posiciones = cartera.map(credito => credito.posicion);
+
+        const reporte = new Cartera(posiciones).generarReporte();
+
+        const candidatos = posiciones.filter(
+            posicion => posicion.estaActiva()
+                && ConsultasCartera.CLASIFICADOR
+                    .superaPlazoParaIncobrable(posicion.diasAtraso)
+        );
+
+        let saldoCandidatos = Dinero.cero();
+        for (const posicion of candidatos) {
+            saldoCandidatos = saldoCandidatos.sumar(posicion.saldoCapital);
+        }
+
+        return {
+            fechaCorte: aTexto(fechaCorte),
+            creditosActivos: posiciones
+                .filter(posicion => posicion.estaActiva()).length,
+            carteraActiva: reporte.carteraActiva.obtenerValor(),
+            carteraEnMora: reporte.carteraEnMora.obtenerValor(),
+            porcentajeEnMora: reporte.porcentajeEnMora,
+            montoEnRiesgo: reporte.montoEnRiesgo.obtenerValor(),
+            porcentajeEnRiesgo: reporte.porcentajeEnRiesgo,
+            dadoPorIncobrable: reporte.dadoPorIncobrable.obtenerValor(),
+            candidatosAIncobrable: candidatos.length,
+            saldoCandidatosAIncobrable: saldoCandidatos.obtenerValor(),
+            desglosePorTramo: reporte.desglosePorTramo.map(fila => ({
+                categoria: fila.categoria,
+                creditos: fila.creditos,
+                saldo: fila.saldo.obtenerValor(),
+                porcentaje: fila.porcentaje
+            }))
+        };
+    }
+
     // ------------------------------------------------------------------
 
     /**
@@ -496,7 +765,14 @@ export class ConsultasCartera {
             alCorte.push({
                 vivo,
                 diasAtraso,
-                tramo: ConsultasCartera.CLASIFICADOR.clasificar(diasAtraso)
+                tramo: ConsultasCartera.CLASIFICADOR.clasificar(diasAtraso),
+                posicion: new PosicionCartera(
+                    registro.idCredito,
+                    vivo.credito.saldoCapital,
+                    diasAtraso,
+                    vivo.credito.nombreEstado(),
+                    registro.reestructurado
+                )
             });
         }
 
