@@ -78,6 +78,7 @@ describe("Servidor MCP - herramientas expuestas", () => {
         expect(nombres).toContain("consultar_cartera");
         expect(nombres).toContain("consultar_cierre_diario");
         expect(nombres).toContain("consultar_cierre_mensual");
+        expect(nombres).toContain("registrar_pago");
     });
 
     it("Cada herramienta declara su esquema de entrada", async () => {
@@ -101,6 +102,7 @@ describe("Servidor MCP - herramientas expuestas", () => {
             expect(
                 propiedades.includes("fechaCorte")
                 || propiedades.includes("periodo")
+                || propiedades.includes("fechaOperacion")
             ).toBe(true);
         }
     });
@@ -265,16 +267,41 @@ describe("Servidor MCP - la fecha de corte es parametro (G-7)", () => {
 
 describe("Servidor MCP - solo lectura por defecto", () => {
 
-    it("Ninguna herramienta registrada modifica la cartera", async () => {
+    /**
+     * El enunciado pide que el asistente sea de solo lectura salvo una
+     * accion. Eso no se declara en un comentario: se declara en el
+     * protocolo, con las anotaciones que el cliente MCP lee para decidir
+     * si puede aprobar sola una llamada.
+     */
+    it("Solo una herramienta escribe, y es registrar_pago", async () => {
 
         const cliente = await clienteConectado();
         const { tools } = await cliente.listTools();
 
-        // Registrar un pago es la unica accion sensible y exige
-        // aprobacion humana; todavia no esta expuesta.
-        const nombres = tools.map(t => t.name);
+        const escriben = tools.filter(
+            herramienta => herramienta.annotations?.readOnlyHint !== true
+        );
 
-        expect(nombres).not.toContain("registrar_pago");
+        expect(escriben).toHaveLength(1);
+        expect(escriben[0].name).toBe("registrar_pago");
+        expect(escriben[0].annotations?.destructiveHint).toBe(true);
+    });
+
+    it("Las otras siete se declaran de solo lectura", async () => {
+
+        const cliente = await clienteConectado();
+        const { tools } = await cliente.listTools();
+
+        const lectura = tools.filter(
+            herramienta => herramienta.name !== "registrar_pago"
+        );
+
+        expect(lectura.length).toBeGreaterThanOrEqual(7);
+
+        for (const herramienta of lectura) {
+            expect(herramienta.annotations?.readOnlyHint).toBe(true);
+            expect(herramienta.annotations?.idempotentHint).toBe(true);
+        }
     });
 
     it("Consultar dos veces no altera el resultado", async () => {
@@ -599,4 +626,179 @@ describe("Servidor MCP - consultar_cierre (G-2 y G-3)", () => {
                 expect(respuesta.isError).toBe(true);
             }
         });
+});
+
+
+describe("Servidor MCP - registrar_pago (OP-1 a OP-6)", () => {
+
+    const EXACTO_0043 = 1114.54;
+
+    /**
+     * La barrera de aprobacion vista desde el protocolo: la llamada sin
+     * `confirmado` responde el desglose y no mueve nada. El asistente lo
+     * muestra, la persona aprueba, y solo entonces se vuelve a llamar.
+     */
+    it("Sin confirmado devuelve la vista previa (OP-1)", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "registrar_pago", {
+            idCredito: "CV-2026-0043",
+            monto: EXACTO_0043,
+            claveIdempotencia: "IDEM-OP-1",
+            fechaOperacion: CORTE
+        });
+
+        expect(r.aplicado).toBe(false);
+        expect(r.estadoDespues).toBeUndefined();
+        expect(r.cuotasCubiertas).toEqual([1, 2]);
+
+        const desglose = r.desglosePrelacion as Record<string, unknown>;
+        expect(desglose.total).toBe(EXACTO_0043);
+
+        // Y el credito sigue igual despues de la vista previa.
+        const estado = await invocar(cliente, "consultar_credito", {
+            idCredito: "CV-2026-0043",
+            fechaCorte: CORTE
+        });
+
+        expect(estado.estado).toBe("en_mora");
+        expect(estado.saldoCapital).toBe(3000);
+    });
+
+    it("Con confirmado aplica y regulariza el credito (OP-1)", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "registrar_pago", {
+            idCredito: "CV-2026-0043",
+            monto: EXACTO_0043,
+            claveIdempotencia: "IDEM-OP-1",
+            fechaOperacion: CORTE,
+            confirmado: true
+        });
+
+        expect(r.aplicado).toBe(true);
+
+        const despues = r.estadoDespues as Record<string, unknown>;
+        expect(despues.estado).toBe("vigente");
+        expect(despues.cuotasVencidas).toBe(0);
+        expect(despues.saldoCapital).toBe(2048.96);
+    });
+
+    it("El reintento con la misma clave no vuelve a cobrar (OP-4)",
+        async () => {
+
+            const cliente = await clienteConectado();
+
+            const argumentos = {
+                idCredito: "CV-2026-0043",
+                monto: EXACTO_0043,
+                claveIdempotencia: "IDEM-OP-1",
+                fechaOperacion: CORTE,
+                confirmado: true
+            };
+
+            const primero = await invocar(
+                cliente, "registrar_pago", argumentos
+            );
+            expect(primero.aplicado).toBe(true);
+
+            const reintento = await invocar(
+                cliente, "registrar_pago", argumentos
+            );
+
+            expect(reintento.aplicado).toBe(false);
+            expect(reintento.duplicado).toBe(true);
+
+            // Y el cierre del dia sigue con un solo pago.
+            const cierre = await invocar(
+                cliente, "consultar_cierre_diario", { fechaCorte: CORTE }
+            );
+
+            expect((cierre.pagos as Record<string, unknown>).cantidad)
+                .toBe(1);
+        });
+
+    it("Rechaza el monto no exacto y dice el correcto (OP-5)", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "registrar_pago", {
+            idCredito: "CV-2026-0061",
+            monto: 500.00,
+            claveIdempotencia: "IDEM-OP-5",
+            fechaOperacion: CORTE,
+            confirmado: true
+        });
+
+        expect(r.error).toBe(true);
+        expect(r.codigo).toBe("MONTO_NO_EXACTO");
+
+        const detalle = r.detalle as Record<string, unknown>;
+        expect(detalle.montoCorrecto).toBe(370.85);
+        expect(detalle.diferencia).toBe(129.15);
+    });
+
+    it("Rechaza el credito incobrable (OP-6)", async () => {
+
+        const cliente = await clienteConectado();
+
+        const r = await invocar(cliente, "registrar_pago", {
+            idCredito: "CV-2026-0015",
+            monto: 298.22,
+            claveIdempotencia: "IDEM-OP-6",
+            fechaOperacion: CORTE,
+            confirmado: true
+        });
+
+        expect(r.error).toBe(true);
+        expect(r.codigo).toBe("CREDITO_INCOBRABLE");
+        expect((r.detalle as Record<string, unknown>).diasAtraso).toBe(130);
+    });
+
+    it("La clave de idempotencia es obligatoria", async () => {
+
+        const cliente = await clienteConectado();
+
+        const respuesta = await cliente.callTool({
+            name: "registrar_pago",
+            arguments: {
+                idCredito: "CV-2026-0043",
+                monto: EXACTO_0043,
+                fechaOperacion: CORTE,
+                confirmado: true
+            }
+        });
+
+        expect(respuesta.isError).toBe(true);
+    });
+
+    it("Rechaza montos no positivos y canales desconocidos", async () => {
+
+        const cliente = await clienteConectado();
+
+        const invalidos = [
+            { monto: 0 },
+            { monto: -100 },
+            { canal: "bitcoin" }
+        ];
+
+        for (const extra of invalidos) {
+
+            const respuesta = await cliente.callTool({
+                name: "registrar_pago",
+                arguments: {
+                    idCredito: "CV-2026-0043",
+                    monto: EXACTO_0043,
+                    claveIdempotencia: "IDEM-Z",
+                    fechaOperacion: CORTE,
+                    confirmado: true,
+                    ...extra
+                }
+            });
+
+            expect(respuesta.isError).toBe(true);
+        }
+    });
 });

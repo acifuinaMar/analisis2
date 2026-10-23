@@ -193,6 +193,67 @@ export const CierreMensualEntrada = z.object({
     periodo: PeriodoEsquema
 });
 
+/**
+ * Clave de idempotencia de la operacion de pago.
+ *
+ * Identifica la OPERACION, no el pago (P1 6.10): reintentar con la misma
+ * clave no vuelve a cobrar. Es obligatoria y la pone el llamador, porque
+ * si la generara el servidor cada reintento seria una clave nueva y la
+ * idempotencia no serviria de nada.
+ */
+const ClaveIdempotenciaEsquema = z
+    .string()
+    .min(4)
+    .max(64)
+    .regex(
+        /^[A-Za-z0-9._:-]+$/,
+        "La clave solo admite letras, numeros, punto, guion, guion bajo "
+        + "y dos puntos."
+    )
+    .describe(
+        "Clave de idempotencia de la operacion, por ejemplo "
+        + "IDEM-OP-1. Reintentar con la misma clave NO vuelve a cobrar."
+    );
+
+const MontoPagoEsquema = z
+    .number()
+    .positive()
+    .describe(
+        "Monto del pago en quetzales. Debe ser exactamente la deuda "
+        + "exigible del credito a la fecha de operacion; si no lo es, la "
+        + "herramienta lo rechaza e indica el monto correcto."
+    );
+
+export const registrarPagoForma: ZodRawShape = {
+    idCredito: IdCreditoEsquema,
+    monto: MontoPagoEsquema,
+    claveIdempotencia: ClaveIdempotenciaEsquema,
+    fechaOperacion: FechaCorteEsquema,
+    canal: z
+        .enum(["agencia", "campo", "transferencia"])
+        .optional()
+        .describe("Canal por el que se recibio el pago. Por omision, agencia."),
+    confirmado: z
+        .boolean()
+        .optional()
+        .describe(
+            "Debe ser true para APLICAR el pago. Omitirlo o enviarlo en "
+            + "false devuelve solo la vista previa con el desglose, sin "
+            + "mover nada: es el paso de aprobacion humana. Nunca lo "
+            + "envie en true sin que una persona haya aprobado el "
+            + "desglose."
+        )
+};
+
+export const RegistrarPagoEntrada = z.object({
+    idCredito: IdCreditoEsquema,
+    monto: MontoPagoEsquema,
+    claveIdempotencia: ClaveIdempotenciaEsquema,
+    fechaOperacion: FechaCorteEsquema,
+    canal: z.enum(["agencia", "campo", "transferencia"]).optional(),
+    confirmado: z.boolean().optional()
+});
+
 export type ConsultarCreditoEntrada =
     z.infer<typeof ConsultarCreditoEntrada>;
 

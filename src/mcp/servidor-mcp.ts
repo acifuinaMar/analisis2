@@ -15,6 +15,7 @@ import {
     DeudaDeCuotaEntrada,
     ExplicarMoraEntrada,
     ProximosVencimientosEntrada,
+    RegistrarPagoEntrada,
     aFechaCorte,
     cierreDiarioForma,
     cierreMensualForma,
@@ -23,7 +24,8 @@ import {
     creditosEnMoraForma,
     deudaDeCuotaForma,
     explicarMoraForma,
-    proximosVencimientosForma
+    proximosVencimientosForma,
+    registrarPagoForma
 } from "./esquemas";
 
 /**
@@ -61,6 +63,13 @@ export interface ErrorHerramienta {
     readonly error: true;
     readonly codigo: string;
     readonly mensaje: string;
+    /**
+     * Datos para reaccionar al rechazo, no solo para leerlo: el monto
+     * correcto cuando el recibido no lo es, los dias de atraso cuando el
+     * credito debe darse de baja. El asistente los toma de un campo en
+     * vez de extraerlos del texto.
+     */
+    readonly detalle?: Record<string, unknown>;
 }
 
 /**
@@ -75,7 +84,8 @@ export function aErrorHerramienta(error: unknown): ErrorHerramienta {
         return {
             error: true,
             codigo: error.codigo,
-            mensaje: error.message
+            mensaje: error.message,
+            ...(error.detalle ? { detalle: error.detalle } : {})
         };
     }
 
@@ -119,6 +129,16 @@ type RegistrarHerramienta = (
         title: string;
         description: string;
         inputSchema: ZodRawShape;
+        /**
+         * Pistas de comportamiento para el cliente MCP. Son lo que le
+         * permite aprobar sin preguntar las consultas y pedir
+         * confirmacion antes de la unica herramienta que escribe.
+         */
+        annotations?: {
+            readOnlyHint?: boolean;
+            destructiveHint?: boolean;
+            idempotentHint?: boolean;
+        };
     },
     manejador: (
         argumentos: Record<string, unknown>
@@ -165,7 +185,11 @@ export function crearServidorMcp(
                 + "estado, saldo de capital, dias de atraso, tramo de mora, "
                 + "cuotas pagadas y vencidas, y la proxima cuota. "
                 + "Solo lectura.",
-            inputSchema: consultarCreditoForma
+            inputSchema: consultarCreditoForma,
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true
+            }
         },
         async (argumentos) => {
             try {
@@ -197,7 +221,11 @@ export function crearServidorMcp(
                 + "una fecha de corte, en el orden de prelacion: gastos de "
                 + "gestion, interes moratorio, interes corriente, capital y "
                 + "total exigible. Solo lectura; no registra ningun pago.",
-            inputSchema: deudaDeCuotaForma
+            inputSchema: deudaDeCuotaForma,
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true
+            }
         },
         async (argumentos) => {
             try {
@@ -232,7 +260,11 @@ export function crearServidorMcp(
                 + "si la suma de los tramos redondeados difiere del total, "
                 + "porque el redondeo ocurre una sola vez al cerrar el "
                 + "calculo. Solo lectura.",
-            inputSchema: explicarMoraForma
+            inputSchema: explicarMoraForma,
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true
+            }
         },
         async (argumentos) => {
             try {
@@ -267,7 +299,11 @@ export function crearServidorMcp(
                 + "(mora_1, mora_2, mora_3 o vencido); sin filtro devuelve "
                 + "todos los que tengan atraso, del mayor al menor. "
                 + "Incluye la cantidad y el saldo total. Solo lectura.",
-            inputSchema: creditosEnMoraForma
+            inputSchema: creditosEnMoraForma,
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true
+            }
         },
         async (argumentos) => {
             try {
@@ -300,7 +336,11 @@ export function crearServidorMcp(
                 + "numero de cuota, la fecha, los dias que faltan y el "
                 + "monto. Devuelve el total de cuotas y el monto esperado. "
                 + "La ventana no incluye el dia del corte. Solo lectura.",
-            inputSchema: proximosVencimientosForma
+            inputSchema: proximosVencimientosForma,
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true
+            }
         },
         async (argumentos) => {
             try {
@@ -336,7 +376,11 @@ export function crearServidorMcp(
                 + "dias y aun no se dan de baja, porque declararlos "
                 + "mejoraria el porcentaje en riesgo sin haber cobrado "
                 + "nada. Solo lectura.",
-            inputSchema: consultarCarteraForma
+            inputSchema: consultarCarteraForma,
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true
+            }
         },
         async (argumentos) => {
             try {
@@ -372,7 +416,11 @@ export function crearServidorMcp(
                 + "corriente, capital y excedente), con el flujo neto. "
                 + "Es idempotente: pedirlo dos veces da lo mismo y no "
                 + "duplica movimientos. Solo lectura.",
-            inputSchema: cierreDiarioForma
+            inputSchema: cierreDiarioForma,
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true
+            }
         },
         async (argumentos) => {
             try {
@@ -399,7 +447,11 @@ export function crearServidorMcp(
                 + "desembolsos del periodo y recuperaciones desglosadas "
                 + "por concepto en el orden de la prelacion, con el flujo "
                 + "neto. Es idempotente. Solo lectura.",
-            inputSchema: cierreMensualForma
+            inputSchema: cierreMensualForma,
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true
+            }
         },
         async (argumentos) => {
             try {
@@ -407,6 +459,63 @@ export function crearServidorMcp(
 
                 return comoContenido(
                     await consultas.consultarCierreMensual(periodo)
+                );
+            } catch (error) {
+                return comoContenido(aErrorHerramienta(error));
+            }
+        }
+    );
+
+    // ------------------------------------------------------------------
+    // Capacidad 8 · Registrar un pago — LA UNICA SENSIBLE
+    // ------------------------------------------------------------------
+    //
+    // Es la unica herramienta que ESCRIBE, y por eso es la unica que no
+    // se puede aprobar de antemano. Se declara con destructiveHint para
+    // que el cliente MCP exija confirmacion, y ademas exige el campo
+    // `confirmado`: sin el, la llamada solo devuelve la vista previa.
+    //
+    // La doble barrera es a proposito. La anotacion es una pista que el
+    // cliente puede ignorar; el campo `confirmado` lo comprueba el
+    // servidor, que es quien no debe confiar en nadie.
+
+    registrar(
+        "registrar_pago",
+        {
+            title: "Registrar un pago (requiere aprobacion)",
+            description:
+                "Registra el pago de las cuotas vencidas de un credito, "
+                + "aplicando la cadena de prelacion: primero gastos de "
+                + "gestion, luego interes moratorio, luego interes "
+                + "corriente y al final capital. "
+                + "IMPORTANTE: llame primero SIN el campo confirmado para "
+                + "obtener el desglose, muestrelo a la persona y espere su "
+                + "aprobacion explicita; solo entonces vuelva a llamar con "
+                + "confirmado en true. "
+                + "El monto debe ser exactamente la deuda exigible: si no "
+                + "lo es, se rechaza indicando el monto correcto. Rechaza "
+                + "tambien los creditos incobrables. Reintentar con la "
+                + "misma clave de idempotencia no vuelve a cobrar.",
+            inputSchema: registrarPagoForma,
+            annotations: {
+                readOnlyHint: false,
+                destructiveHint: true,
+                idempotentHint: true
+            }
+        },
+        async (argumentos) => {
+            try {
+                const datos = RegistrarPagoEntrada.parse(argumentos);
+
+                return comoContenido(
+                    await consultas.registrarPago(
+                        datos.idCredito,
+                        datos.monto,
+                        datos.claveIdempotencia,
+                        aFechaCorte(datos.fechaOperacion),
+                        datos.canal ?? "agencia",
+                        datos.confirmado === true
+                    )
                 );
             } catch (error) {
                 return comoContenido(aErrorHerramienta(error));

@@ -4,7 +4,9 @@ import {
     endOfMonth
 } from "date-fns";
 
+import { Credito } from "../dominio/credito";
 import { Dinero } from "../dominio/dinero";
+import { PlanAmortizacion } from "../dominio/plan-amortizacion";
 import { NombreEstado } from "../dominio/nombre-estado";
 import { RepositorioCartera } from "../dominio/repositorio-cartera";
 import { ClasificadorTramoMora, TramoMora } from "../dominio/tramo-mora";
@@ -40,7 +42,14 @@ export class ErrorConsulta extends Error {
 
     constructor(
         public readonly codigo: string,
-        mensaje: string
+        mensaje: string,
+        /**
+         * Datos que el llamador necesita para reaccionar, no solo para
+         * leer. Un rechazo por monto no exacto debe poder decir CUAL es
+         * el monto correcto, y el asistente tiene que poder tomarlo de un
+         * campo en vez de sacarlo del texto del mensaje.
+         */
+        public readonly detalle?: Record<string, unknown>
     ) {
         super(mensaje);
         this.name = "ErrorConsulta";
@@ -392,6 +401,74 @@ export interface Cierre {
      * mes de crecimiento.
      */
     readonly flujoNeto: number;
+
+}
+
+/** Como se reparte un pago entre los rubros (prelacion, P1 6.6.2). */
+export interface DesglosePrelacion {
+
+    readonly gastos: number;
+
+    readonly interesMoratorio: number;
+
+    readonly interesCorriente: number;
+
+    readonly capital: number;
+
+    readonly total: number;
+
+}
+
+/** Foto corta del credito, para contrastar antes y despues del pago. */
+export interface ResumenEstadoCredito {
+
+    readonly estado: NombreEstado;
+
+    readonly tramo: TramoMora;
+
+    readonly diasAtraso: number;
+
+    readonly saldoCapital: number;
+
+    readonly cuotasVencidas: number;
+
+}
+
+export interface ResultadoPago {
+
+    /**
+     * Falso cuando la llamada fue una VISTA PREVIA: se calculo el
+     * desglose y no se toco nada. Es el paso de aprobacion humana.
+     */
+    readonly aplicado: boolean;
+
+    /**
+     * Verdadero cuando la clave ya se habia registrado. No es un error:
+     * es la idempotencia funcionando (P1 6.10), y el saldo no se movio.
+     */
+    readonly duplicado: boolean;
+
+    readonly idCredito: string;
+
+    readonly nombreCliente: string;
+
+    readonly fechaOperacion: string;
+
+    readonly claveIdempotencia: string;
+
+    readonly montoRecibido: number;
+
+    /** Cuotas exigibles que el pago cubre, de la mas antigua a la nueva. */
+    readonly cuotasCubiertas: ReadonlyArray<number>;
+
+    readonly desglosePrelacion: DesglosePrelacion;
+
+    readonly estadoAntes: ResumenEstadoCredito;
+
+    /** Solo cuando el pago se aplico de verdad. */
+    readonly estadoDespues?: ResumenEstadoCredito;
+
+    readonly mensaje: string;
 
 }
 
@@ -940,6 +1017,264 @@ export class ConsultasCartera {
         };
     }
 
+    /**
+     * Capacidad 8: registrar un pago. LA UNICA SENSIBLE.
+     *
+     * Aplica la prelacion y la idempotencia del Proyecto 1. Ejercita OP-1,
+     * OP-2, OP-4, OP-5 y OP-6.
+     *
+     * APROBACION HUMANA. Con `confirmado` en falso —el valor por
+     * omision— no toca nada: calcula el desglose y lo devuelve como vista
+     * previa. El asistente lo muestra, la persona aprueba, y solo
+     * entonces se vuelve a llamar con `confirmado` en verdadero. El paso
+     * no es un adorno: es lo que impide que el modelo mueva dinero por su
+     * cuenta.
+     *
+     * MONTO EXACTO. El monto debe ser el total adeudado de TODAS las
+     * cuotas exigibles al corte, porque es sobre ese total que opera la
+     * cadena de prelacion (P1 6.6.2). Pagarlo exacto deja el credito sin
+     * cuotas vencidas y lo regulariza a VIGENTE, que es la poscondicion
+     * del escenario de pago exacto (P1 6.6.3). Un monto distinto se
+     * rechaza diciendo cual es el correcto.
+     *
+     * No se aceptan pagos parciales por esta via a proposito. El nucleo
+     * sabe aplicarlos (P1 6.6.4), pero un parcial es una decision de
+     * negocio que el asesor toma en ventanilla con el cliente delante, no
+     * algo que convenga delegar a un chat.
+     */
+    public async registrarPago(
+        idCredito: string,
+        monto: number,
+        claveIdempotencia: string,
+        fechaOperacion: Date,
+        canal: string,
+        confirmado: boolean
+    ): Promise<ResultadoPago> {
+
+        const { credito, plan, registro } =
+            await this.reconstruirCredito(idCredito);
+
+        plan.actualizarEstado(fechaOperacion);
+
+        const cliente = await this.repositorio.obtenerCliente(
+            registro.idCliente
+        );
+
+        const nombreCliente = cliente?.nombreCompleto ?? "(desconocido)";
+
+        const antes = this.resumirEstado(credito, plan, fechaOperacion);
+
+        // --- Idempotencia PRIMERO (OP-4) -------------------------------
+        //
+        // Antes de validar cualquier regla de negocio. Una clave repetida
+        // significa que esa operacion ya se registro, y el reintento debe
+        // devolver ese mismo desenlace SIN IMPORTAR como haya cambiado la
+        // cartera desde entonces: para eso existe la clave.
+        //
+        // Ponerlo despues de las validaciones rompia justo el caso que
+        // importa. Al reintentar el pago que ya se aplico, el credito ya
+        // no tiene cuotas vencidas, asi que el reintento moria con un
+        // "no hay deuda exigible" en vez del "ya estaba registrado, no se
+        // volvio a cobrar" que el reintento necesita oir.
+        const yaRegistrado = (await this.repositorio.listarPagos())
+            .find(pago => pago.claveIdempotencia === claveIdempotencia);
+
+        if (yaRegistrado) {
+            return {
+                aplicado: false,
+                duplicado: true,
+                idCredito,
+                nombreCliente,
+                fechaOperacion: aTexto(fechaOperacion),
+                claveIdempotencia,
+                montoRecibido: yaRegistrado.monto.obtenerValor(),
+                // En ESTA llamada no se imputo nada: el desglose va en
+                // cero y sin cuotas, que es exactamente lo que ocurrio.
+                cuotasCubiertas: [],
+                desglosePrelacion: {
+                    gastos: 0,
+                    interesMoratorio: 0,
+                    interesCorriente: 0,
+                    capital: 0,
+                    total: 0
+                },
+                estadoAntes: antes,
+                mensaje:
+                    `La clave ${claveIdempotencia} ya se habia registrado `
+                    + `el ${aTexto(yaRegistrado.fecha)} por `
+                    + `Q${yaRegistrado.monto.obtenerValor().toFixed(2)} `
+                    + `(credito ${yaRegistrado.idCredito}, canal `
+                    + `${yaRegistrado.canal}). El pago NO se volvio a `
+                    + "aplicar y el saldo no se movio."
+            };
+        }
+
+        // --- Rechazo 1: el credito es incobrable (OP-6) -----------------
+        //
+        // Se rechaza tanto si ya se declaro la baja como si el atraso ya
+        // supera los 120 dias y la baja esta pendiente.
+        //
+        // Lo segundo es deliberado. Declarar incobrable es una decision
+        // contable y el nucleo nunca la toma solo (P1 6.7), asi que un
+        // credito de 130 dias sigue en estado EN_MORA y tecnicamente
+        // admite pagos. Pero cobrarle por la via normal lo mantendria en
+        // la cartera cuando las reglas exigen darlo de baja, y
+        // clasificaria el dinero como recuperacion corriente en vez de
+        // RECUPERACION DE INCOBRABLE, que va en cuenta separada y la
+        // gestiona la casa de cobro (P1 6.7). Ante esa duda, una
+        // herramienta automatica no cobra: avisa.
+        const superaPlazo = ConsultasCartera.CLASIFICADOR
+            .superaPlazoParaIncobrable(antes.diasAtraso);
+
+        if (antes.estado === NombreEstado.INCOBRABLE || superaPlazo) {
+
+            const yaDeclarado = antes.estado === NombreEstado.INCOBRABLE;
+
+            throw new ErrorConsulta(
+                "CREDITO_INCOBRABLE",
+                yaDeclarado
+                    ? `El credito ${idCredito} esta declarado incobrable: `
+                        + "su cobro va por la casa de cobro externa y se "
+                        + "registra como recuperacion de incobrable, en "
+                        + "cuenta separada."
+                    : `El credito ${idCredito} lleva ${antes.diasAtraso} `
+                        + "dias de atraso y supera los 120 que obligan a "
+                        + "la baja contable. No se puede recibir un pago "
+                        + "corriente mientras la baja este pendiente.",
+                {
+                    diasAtraso: antes.diasAtraso,
+                    estado: antes.estado,
+                    bajaPendiente: !yaDeclarado
+                }
+            );
+        }
+
+        // --- Rechazo 2: no hay nada exigible ---------------------------
+        const exigibles = plan.cuotasExigibles(fechaOperacion);
+
+        if (exigibles.length === 0) {
+            throw new ErrorConsulta(
+                "CUOTA_YA_PAGADA",
+                `El credito ${idCredito} no tiene cuotas vencidas al `
+                + `${aTexto(fechaOperacion)}: no hay deuda exigible que `
+                + "pagar.",
+                { cuotasVencidas: 0 }
+            );
+        }
+
+        const deuda = plan.calcularTotalAdeudado(fechaOperacion);
+
+        const desglose: DesglosePrelacion = {
+            gastos: deuda.gastos.obtenerValor(),
+            interesMoratorio: deuda.interesMoratorio.obtenerValor(),
+            interesCorriente: deuda.interesCorriente.obtenerValor(),
+            capital: deuda.capital.obtenerValor(),
+            total: deuda.total().obtenerValor()
+        };
+
+        const cuotasCubiertas = exigibles.map(cuota => cuota.numero);
+
+        // --- Rechazo 3: el monto no es exacto (OP-5) -------------------
+        //
+        // La comparacion se hace sobre centavos enteros. Comparar
+        // decimales con === es justamente el error que el Proyecto 1
+        // corrigio al representar el dinero en centavos.
+        const recibido = Dinero.desde(monto);
+
+        if (recibido.obtenerCentavos() !== deuda.total().obtenerCentavos()) {
+            throw new ErrorConsulta(
+                "MONTO_NO_EXACTO",
+                `El monto Q${monto.toFixed(2)} no corresponde a la deuda `
+                + `del credito ${idCredito} al `
+                + `${aTexto(fechaOperacion)}. El monto correcto es `
+                + `Q${desglose.total.toFixed(2)}.`,
+                {
+                    montoRecibido: recibido.obtenerValor(),
+                    montoCorrecto: desglose.total,
+                    diferencia:
+                        (recibido.obtenerCentavos()
+                            - deuda.total().obtenerCentavos()) / 100,
+                    desglosePrelacion: desglose,
+                    cuotasCubiertas
+                }
+            );
+        }
+
+        const comun = {
+            idCredito,
+            nombreCliente,
+            fechaOperacion: aTexto(fechaOperacion),
+            claveIdempotencia,
+            montoRecibido: recibido.obtenerValor(),
+            cuotasCubiertas,
+            desglosePrelacion: desglose,
+            estadoAntes: antes
+        };
+
+        // --- Vista previa: aqui se detiene si nadie aprobo (OP-1) ------
+        if (!confirmado) {
+            return {
+                ...comun,
+                aplicado: false,
+                duplicado: false,
+                mensaje:
+                    `Vista previa. Q${desglose.total.toFixed(2)} saldaria `
+                    + `${cuotasCubiertas.length} cuota(s) vencida(s) del `
+                    + `credito ${idCredito} y lo regularizaria. Requiere `
+                    + "aprobacion humana: vuelva a llamar con confirmado "
+                    + "en verdadero para aplicarlo."
+            };
+        }
+
+        // --- Registro del evento, idempotente por clave (OP-4) --------
+        const resultado = await this.repositorio.registrarPago({
+            claveIdempotencia,
+            idCredito,
+            fecha: fechaOperacion,
+            monto: recibido,
+            canal
+        });
+
+        // Red de seguridad: la comprobacion de arriba ya filtro las
+        // claves repetidas, pero el puerto vuelve a verificarlo al
+        // escribir. Si dos llamadas con la misma clave entran a la vez,
+        // la segunda llega aqui y tampoco cobra dos veces.
+        if (resultado.duplicado) {
+            return {
+                ...comun,
+                aplicado: false,
+                duplicado: true,
+                mensaje:
+                    `La clave ${claveIdempotencia} ya se habia registrado `
+                    + `el ${aTexto(resultado.pago.fecha)} por `
+                    + `Q${resultado.pago.monto.obtenerValor().toFixed(2)}. `
+                    + "El pago NO se volvio a aplicar y el saldo no se "
+                    + "movio."
+            };
+        }
+
+        // El estado posterior se lee de una reconstruccion NUEVA, que ya
+        // incluye el evento recien registrado. No se parchea el plan que
+        // quedo en memoria: la cartera se deriva de los eventos, siempre.
+        const despues = await this.reconstruirCredito(idCredito);
+        despues.plan.actualizarEstado(fechaOperacion);
+
+        return {
+            ...comun,
+            aplicado: true,
+            duplicado: false,
+            estadoDespues: this.resumirEstado(
+                despues.credito,
+                despues.plan,
+                fechaOperacion
+            ),
+            mensaje:
+                `Pago de Q${desglose.total.toFixed(2)} aplicado al credito `
+                + `${idCredito}. Saldo ${cuotasCubiertas.length} cuota(s) `
+                + "vencida(s)."
+        };
+    }
+
     // ------------------------------------------------------------------
 
     /**
@@ -991,6 +1326,23 @@ export class ConsultasCartera {
         }
 
         return alCorte;
+    }
+
+    private resumirEstado(
+        credito: Credito,
+        plan: PlanAmortizacion,
+        fechaCorte: Date
+    ): ResumenEstadoCredito {
+
+        const diasAtraso = plan.diasAtrasoMaximo(fechaCorte);
+
+        return {
+            estado: credito.nombreEstado(),
+            tramo: ConsultasCartera.CLASIFICADOR.clasificar(diasAtraso),
+            diasAtraso,
+            saldoCapital: credito.saldoCapital.obtenerValor(),
+            cuotasVencidas: plan.cuotasExigibles(fechaCorte).length
+        };
     }
 
     private async reconstruirCredito(idCredito: string) {
