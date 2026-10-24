@@ -1,0 +1,4 @@
+# El paquete canonico se verifica con SHA-256 sobre los bytes exactos.
+# Git NO debe convertir sus fines de linea: una conversion a CRLF cambia
+# el hash y el cargador rechaza el paquete (HUELLA_NO_COINCIDE).
+datos/** -text
