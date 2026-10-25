@@ -2,3 +2,14 @@
 # Git NO debe convertir sus fines de linea: una conversion a CRLF cambia
 # el hash y el cargador rechaza el paquete (HUELLA_NO_COINCIDE).
 datos/** -text
+
+# Binarios: git no debe convertir sus fines de linea. Para un PDF o una
+# imagen, esa conversion no es un detalle de formato: los corrompe. Aqui
+# no se deja a la deteccion automatica.
+*.pdf  -text
+*.doc  -text
+*.docx -text
+*.png  -text
+*.jpg  -text
+*.jpeg -text
+*.zip  -text
