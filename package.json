@@ -13,7 +13,9 @@
     "db:probar": "node --env-file=.env --import tsx src/rag/probarConexionBD.ts",
     "rag:buscar": "node --env-file=.env --import tsx src/rag/probarBusqueda.ts",
     "rag:responder": "node --env-file=.env --import tsx src/rag/probarRespuesta.ts",
-    "cargar": "node --env-file=.env --import tsx src/persistencia/cargar.ts"
+    "cargar": "node --env-file=.env --import tsx src/persistencia/cargar.ts",
+    "mcp:servidor": "node --env-file=.env --import tsx src/mcp/servidor.ts",
+    "rag:indexar": "node --env-file=.env --import tsx src/rag/indexarCorpus.ts"
   },
   "repository": {
     "type": "git",
