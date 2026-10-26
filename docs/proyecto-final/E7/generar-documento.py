@@ -182,7 +182,7 @@ h += [
         "portada",
     ),
     Spacer(1, 1.6 * cm),
-    p("24 de octubre de 2026", "portada"),
+    p("25 de octubre de 2026", "portada"),
     PageBreak(),
 ]
 
@@ -225,9 +225,9 @@ h += [
    PREGUNTA EN LENGUAJE NATURAL
              |
    +---------v-----------------------------------------+
-   |  CHAT GERENCIAL (E5)                              |
+   |  ORQUESTADOR DEL CHAT (E5)                        |
    |  Decide si la pregunta necesita documentos,       |
-   |  cifras, o las dos cosas                          |
+   |  cifras, las dos o ninguna. Recuerda la sesion.   |
    +------+--------------------------------+-----------+
           |                                |
    +------v---------+            +---------v-----------+
@@ -448,13 +448,70 @@ h += [
 
 # ───────────────────────────────── 5. DECISIONES
 h += [
-    p("5. Decisiones de diseno", "h1"),
+    p("5. El orquestador del chat", "h1"),
+    p(
+        "El asistente tiene dos ramas y una pregunta puede necesitar las "
+        "dos. El orquestador decide cual usar, mantiene la memoria de la "
+        "sesion para que las preguntas encadenadas tengan contexto, y "
+        "detiene la unica accion sensible hasta que una persona la "
+        "aprueba."
+    ),
+    p(
+        "No depende de la interfaz. La pantalla del E1 consumira el mismo "
+        "objeto —preguntar, aprobarPago, rechazarPago, historial—, asi que "
+        "la logica del chat se prueba sin navegador."
+    ),
+    p("5.1 El modelo de lenguaje entra por un puerto", "h2"),
+    p(
+        "ModeloLenguaje se inyecta, igual que el repositorio de cartera. "
+        "Importa por dos razones concretas. La primera es que las pruebas "
+        "corren sin red ni clave de API: toda la orquestacion se ejercita "
+        "con un modelo guionizado, de forma determinista. Sin eso, probar "
+        "el chat exigiria llamar a un modelo real, que ni es gratis ni "
+        "devuelve lo mismo dos veces. La segunda es que el puerto no "
+        "expone el formato del proveedor: usa un vocabulario propio y el "
+        "adaptador traduce."
+    ),
+    p(
+        "Las pruebas corren contra el servidor MCP REAL, atravesando el "
+        "protocolo, con el adaptador del paquete canonico detras. Solo se "
+        "sustituye el modelo, de modo que las cifras que se afirman son "
+        "las del nucleo."
+    ),
+    p("5.2 La aprobacion la concede el orquestador, no el modelo", "h2"),
+    p(
+        "Cuando el modelo propone un pago, el orquestador fija el campo de "
+        "confirmacion en falso VENGA COMO VENGA en los argumentos, "
+        "ejecuta la vista previa y se detiene devolviendo el desglose de "
+        "la prelacion. La confirmacion solo la pone el metodo que llama "
+        "una persona."
+    ),
+    p(
+        "Es la tercera barrera, sobre las dos que ya tenia la herramienta. "
+        "Hay una prueba dedicada: aunque el modelo pida explicitamente la "
+        "confirmacion, no se aplica nada. Un rechazo del nucleo, en "
+        "cambio, no pide aprobacion porque no hay nada que aprobar: el "
+        "monto no exacto y el credito incobrable vuelven al modelo para "
+        "que los explique."
+    ),
+    p("5.3 Las instrucciones heredan las del modulo documental", "h2"),
+    p(
+        "Las reglas del asistente se construyen SOBRE las del modulo RAG "
+        "en vez de repetirlas. Dos juegos de reglas para el mismo "
+        "asistente acabarian contradiciendose, y entonces no se sabria "
+        "cual rige. Las del E4 gobiernan como tratar los documentos; las "
+        "del chat agregan como usar las herramientas: toda cifra viene de "
+        "una herramienta, toda consulta necesita su fecha de corte, y el "
+        "pago jamas se propone por iniciativa propia."
+    ),
+
+    p("6. Decisiones de diseno", "h1"),
     p(
         "Se recogen las decisiones que cambiaron cifras o que estuvieron en "
         "duda. Las que fueron evidentes no se documentan."
     ),
 
-    p("5.1 El dinero se representa en centavos enteros", "h2"),
+    p("6.1 El dinero se representa en centavos enteros", "h2"),
     p(
         "Un importe es un numero entero de centavos, nunca un decimal de "
         "punto flotante. Es la decision mas antigua del proyecto y la que "
@@ -463,7 +520,7 @@ h += [
         "redondeo es medio hacia arriba y ocurre en un unico lugar."
     ),
 
-    p("5.2 La mora escalonada suma tramos recorridos", "h2"),
+    p("6.2 La mora escalonada suma tramos recorridos", "h2"),
     p(
         "Una cuota con 45 dias de atraso no estuvo 45 dias en Mora 2: "
         "estuvo 30 en Mora 1 y lleva 15 en Mora 2. El interes es la suma "
@@ -490,7 +547,7 @@ h += [
         "Redondear tramo por tramo seria un descuadre contable por cuota."
     ),
 
-    p("5.3 El gasto de gestion solo aplica a una politica", "h2"),
+    p("6.3 El gasto de gestion solo aplica a una politica", "h2"),
     p(
         "El enunciado del Proyecto 2 no aclaraba si el gasto de Q25 "
         "alcanzaba a los creditos con politica plana. El paquete canonico "
@@ -500,7 +557,7 @@ h += [
         "correccion, los creditos de politica plana mostraban Q25 de mas."
     ),
 
-    p("5.4 Dos correcciones del nucleo que el paquete canonico revelo", "h2"),
+    p("6.4 Dos correcciones del nucleo que el paquete canonico revelo", "h2"),
     p(
         "Al recorrer la cartera completa aparecieron los 75 creditos en "
         "mora, lo que era imposible. El diagnostico encontro dos errores, "
@@ -540,7 +597,7 @@ h += [
         "sido modificados."
     ),
 
-    p("5.5 La accion sensible tiene doble barrera", "h2"),
+    p("6.5 La accion sensible tiene doble barrera", "h2"),
     p(
         "Registrar un pago es la unica operacion que escribe. Exige dos "
         "cosas independientes:"
@@ -567,7 +624,7 @@ h += [
         "convenga delegar a un chat."
     ),
 
-    p("5.6 La idempotencia se resuelve antes de validar", "h2"),
+    p("6.6 La idempotencia se resuelve antes de validar", "h2"),
     p(
         "Una clave de idempotencia repetida significa que esa operacion ya "
         "se registro, y el reintento debe devolver el mismo desenlace sin "
@@ -582,7 +639,7 @@ h += [
         "volvio a cobrar\u201d que el reintento necesita oir."
     ),
 
-    p("5.7 Se rechaza el cobro de un credito con mas de 120 dias", "h2"),
+    p("6.7 Se rechaza el cobro de un credito con mas de 120 dias", "h2"),
     p(
         "Declarar un credito incobrable es una decision contable, y el "
         "nucleo nunca la toma solo. Por eso un credito con 130 dias de "
@@ -598,7 +655,7 @@ h += [
         "ya se declaro o esta pendiente."
     ),
 
-    p("5.8 Los datos personales no cruzan el borde", "h2"),
+    p("6.8 Los datos personales no cruzan el borde", "h2"),
     p(
         "El repositorio guarda DPI, telefono y municipio de cada cliente. "
         "De las ocho capacidades, las cuatro que consultan al cliente "
@@ -616,7 +673,7 @@ h += [
 
 # ───────────────────────────────── 6. OP-7
 h += [
-    p("6. Resistencia a instrucciones incrustadas", "h1"),
+    p("7. Resistencia a instrucciones incrustadas", "h1"),
     p(
         "El corpus incluye una nota operativa de cobranza en campo de "
         "apariencia normal, con un parrafo inyectado que ordena al "
@@ -672,20 +729,21 @@ h += [
         "advierte que el documento no es politica vigente."
     ),
 
-    p("7. Resultados de las pruebas", "h1"),
+    p("8. Resultados de las pruebas", "h1"),
     p(
         "La suite se ejecuta con un solo comando, sin red y sin base de "
         "datos. Las pruebas que necesitan una base usan PostgreSQL "
         "embebido en memoria: es Postgres real -llaves foraneas, indices "
         "unicos parciales, transacciones- pero sin servidor ni "
-        "credenciales."
+        "credenciales. Las que necesitan un modelo de lenguaje usan "
+        "un modelo guionizado."
     ),
     bloque(
         """
   npm test
 
-  Test Files   38 passed (38)
-       Tests  520 passed (520)
+  Test Files   41 passed (41)
+       Tests  587 passed (587)
         """
     ),
     tabla(
@@ -702,6 +760,9 @@ h += [
              "dos adaptadores"],
             ["Modulo RAG (E4)", "61",
              "Fragmentacion, citacion, validacion y reglas de seguridad"],
+            ["Chat y evaluacion (E5 y E6)", "67",
+             "Orquestacion, memoria de la sesion, la barrera de aprobacion "
+             "y los catorce casos de evaluacion"],
             ["Resistencia a inyeccion (OP-7)", "12",
              "Que los datos personales no sean alcanzables y que el pago "
              "inyectado no se aplique"],
@@ -710,7 +771,7 @@ h += [
         negrita_primera=True,
     ),
     Spacer(1, 8),
-    p("7.1 Oraculos del enunciado reproducidos", "h2"),
+    p("8.1 Oraculos del enunciado reproducidos", "h2"),
     p(
         "Son las cifras que el enunciado fija de antemano. Se cumplen sin "
         "que las pruebas hayan sido ajustadas para que coincidan, lo que "
@@ -736,17 +797,49 @@ h += [
         [A * 0.16, A * 0.17, A * 0.67],
         negrita_primera=True,
     ),
+    Spacer(1, 8),
+    p("8.2 Evaluacion del asistente", "h2"),
+    p(
+        "Catorce casos: las siete consultas de gerencia del Anexo B, tres "
+        "operaciones, dos de seguridad y dos de limite. Cada caso declara "
+        "que herramientas deben invocarse, que cifras deben aparecer y que "
+        "texto no debe aparecer."
+    ),
+    p(
+        "Se mide, sobre todo, el fallo que mas importa atrapar: que el "
+        "asistente invoque la herramienta correcta y luego diga una cifra "
+        "DISTINTA a la que recibio. Tambien que se detenga a pedir "
+        "aprobacion donde corresponde y solo ahi, y que ante una consulta "
+        "sin fecha de corte la pregunte en vez de suponer la de hoy."
+    ),
+    p(
+        "EL CONJUNTO NO PUEDE DESFASARSE EN SILENCIO. Un conjunto de "
+        "evaluacion con cifras escritas a mano acaba midiendo nada: el "
+        "nucleo cambia, las cifras esperadas se quedan viejas y la "
+        "evaluacion sigue dando verde contra una expectativa equivocada. "
+        "Por eso una prueba comprueba que cada cifra esperada siga "
+        "apareciendo en la salida real de su herramienta, y que lo "
+        "prohibido no aparezca: Q6.01 y Q34.47 son las cifras que daba el "
+        "nucleo con el plan de amortizacion corrido un mes."
+    ),
+    p(
+        "Las cifras se comparan por VALOR y no como texto. Comparar "
+        "cadenas falla por los dos lados: sobra lo que no deberia, porque "
+        "«130» aparece dentro de «1300»; y falta lo que si deberia, porque "
+        "JSON serializa 36554.50 como «36554.5» mientras el asistente "
+        "escribe «Q36,554.50», que es la misma cifra."
+    ),
 ]
 
 # ───────────────────────────────── 8. CIFRAS
 h += [
-    p("8. Cifras del asistente sobre el paquete canonico", "h1"),
+    p("9. Cifras del asistente sobre el paquete canonico", "h1"),
     p(
         "Todas al 31 de octubre de 2026, la fecha en que el paquete deja "
         "la cartera congelada. Son las respuestas que el chat y las "
         "pantallas deben coincidir en mostrar."
     ),
-    p("8.1 Estado de la cartera (G-1)", "h2"),
+    p("9.1 Estado de la cartera (G-1)", "h2"),
     tabla(
         ["Indicador", "Monto", "Sobre la cartera activa"],
         [
@@ -796,7 +889,7 @@ h += [
         "sin haber cobrado un centavo, y ese porcentaje nunca debe "
         "reportarse solo."
     ),
-    p("8.2 Cierre mensual de octubre (G-2)", "h2"),
+    p("9.2 Cierre mensual de octubre (G-2)", "h2"),
     tabla(
         ["Concepto", "Monto"],
         [
@@ -826,7 +919,7 @@ h += [
         "<b>cantidad</b> de movimientos, para que el asistente pueda "
         "distinguir \u201cno hubo movimiento\u201d de un fallo."
     ),
-    p("8.3 Operaciones del guion", "h2"),
+    p("9.3 Operaciones del guion", "h2"),
     tabla(
         ["Op.", "Credito", "Resultado"],
         [
@@ -853,20 +946,21 @@ h += [
 
 # ───────────────────────────────── 9. ESTADO
 h += [
-    p("9. Estado del proyecto", "h1"),
+    p("10. Estado del proyecto", "h1"),
     tabla(
         ["Entregable", "Estado"],
         [
             ["E1 - Interfaz de usuario implementada", "Pendiente"],
             ["E2 - Persistencia y carga canonica", "Terminado"],
             ["E3 - Servidor MCP sobre los puertos del Proyecto 1",
-             "Servidor terminado; su demostracion en el chat depende "
-             "del E5"],
+             "Terminado"],
             ["E4 - RAG con citacion de fuentes", "Terminado"],
-            ["E5 - Chat gerencial integrado a la interfaz", "Pendiente"],
+            ["E5 - Chat gerencial integrado a la interfaz",
+             "Orquestador terminado y probado; falta la pantalla, que es "
+             "del E1"],
             ["E6 - Pruebas",
-             "520 pruebas en verde; falta la evaluacion del asistente "
-             "sobre las consultas G-1 a G-7"],
+             "Terminado: 587 pruebas, incluida la evaluacion del "
+             "asistente"],
             ["E7 - Repositorio, documentacion y video",
              "README y este documento al dia; falta el video"],
         ],
@@ -876,10 +970,13 @@ h += [
     Spacer(1, 10),
     p(
         "El servidor MCP cuenta con un punto de entrada propio por STDIO, "
-        "de modo que las ocho capacidades se pueden ejercitar con "
-        "cualquier cliente MCP sin esperar la interfaz ni el chat."
+        "y el chat con un arnes de consola, de modo que las ocho "
+        "capacidades y la orquestacion se pueden ejercitar sin esperar la "
+        "interfaz. Ese arnes no es el entregable del E5, que pide el chat "
+        "dentro de la aplicacion: es la herramienta con la que se maneja "
+        "mientras la pantalla se construye."
     ),
-    p("10. Resumen", "h1"),
+    p("11. Resumen", "h1"),
     *vinetas([
         "El nucleo del Proyecto 1 se conservo y se evoluciono; no se "
         "reescribio. Las pruebas de las etapas anteriores siguen pasando "
@@ -905,6 +1002,14 @@ h += [
         "paquete canonico de datos. Ninguno estaba en una formula: los dos "
         "eran condiciones, y los oraculos del enunciado se cumplen ahora "
         "sin haber sido modificados.",
+
+        "El modelo de lenguaje tambien entra por un puerto, de modo que la "
+        "orquestacion del chat se prueba sin red ni clave de API, y la "
+        "aprobacion del pago la concede el orquestador y no el modelo.",
+
+        "El conjunto de evaluacion esta amarrado al nucleo por una prueba, "
+        "para que no pueda quedarse viejo en silencio y medir contra una "
+        "expectativa equivocada.",
     ]),
 ]
 

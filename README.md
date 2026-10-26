@@ -8,7 +8,7 @@
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
 ![Node](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-520%20pruebas-6E9F18)
+![Vitest](https://img.shields.io/badge/Vitest-587%20pruebas-6E9F18)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-9%20herramientas-D97757)
 ![Gemini](https://img.shields.io/badge/Gemini-RAG-4285F4?logo=google&logoColor=white)
@@ -44,11 +44,11 @@ Entregables del **Proyecto Final**.
 |---|---|---|
 | **E1** | Interfaz de usuario implementada (7 pantallas, 3 flujos) | Pendiente |
 | **E2** | Persistencia y carga canónica | Terminado |
-| **E3** | Servidor MCP sobre los puertos del Proyecto 1 | Servidor terminado; su demostración en el chat depende del E5 |
+| **E3** | Servidor MCP sobre los puertos del Proyecto 1 | Terminado |
 | **E4** | RAG con citación de fuentes | Terminado |
-| **E5** | Chat gerencial integrado a la interfaz | Pendiente |
-| **E6** | Pruebas | 520 pruebas en verde; falta la evaluación del asistente sobre G-1…G-7 |
-| **E7** | Repositorio, documentación y video | README al día; faltan el PDF y el video |
+| **E5** | Chat gerencial integrado a la interfaz | Orquestador terminado y probado; falta la pantalla, que es del E1 |
+| **E6** | Pruebas | Terminado: 587 pruebas, incluida la evaluación del asistente |
+| **E7** | Repositorio, documentación y video | README y documento técnico al día; falta el video |
 
 ---
 
@@ -142,10 +142,22 @@ npm run mcp:servidor -- --csv   # sobre el paquete en archivos, sin base
 
 Habla por **STDIO**, el transporte que esperan los clientes MCP. Esto permite
 ejercitar las ocho capacidades con cualquier cliente sin esperar la interfaz
-del E1 ni el chat del E5.
+del E1.
 
-> La interfaz web (E1) y el chat (E5) todavía no están implementados, así que
-> por ahora el sistema se opera por estos comandos.
+## 7 · Conversar con el asistente
+
+```bash
+npm run chat                    # sobre PostgreSQL
+npm run chat -- --csv           # sobre el paquete en archivos
+npm run evals:asistente         # la evaluación de los 14 casos
+```
+
+Ambos necesitan `GEMINI_API_KEY`.
+
+> La **interfaz web (E1)** todavía no está implementada, así que el chat se
+> opera por consola. Esa consola no es el entregable del E5 —que pide el chat
+> dentro de la aplicación— sino el arnés con el que se maneja y se demuestra
+> el orquestador mientras la pantalla se construye.
 
 ---
 
@@ -259,6 +271,68 @@ idempotencia no vuelve a cobrar, y esa comprobación ocurre **antes** de
 cualquier validación de negocio: la clave identifica la operación, no el pago,
 así que un reintento devuelve el mismo desenlace sin importar cómo haya
 cambiado la cartera.
+
+---
+
+# Chat gerencial (E5)
+
+El asistente tiene dos ramas que responden preguntas distintas: el **módulo
+documental** contesta *qué dice la política*, y el **servidor MCP** contesta
+*cuánto debe este crédito*. El orquestador decide, para cada pregunta, si hace
+falta una, la otra, las dos o ninguna.
+
+```text
+   PREGUNTA
+      |
+   Orquestador  ──  memoria de la sesión
+      |
+      +── consultar_politicas ──>  RAG (E4)
+      |
+      +── 9 herramientas ──────>  Servidor MCP (E3)  ──>  Núcleo
+```
+
+## El modelo de lenguaje entra por un puerto
+
+`ModeloLenguaje` se inyecta, igual que el repositorio de cartera. Importa por
+dos razones concretas:
+
+- **Las pruebas corren sin red ni clave de API.** Toda la orquestación se
+  ejercita con un modelo guionizado, de forma determinista. El modelo
+  guionizado es, para el modelo, lo que PGlite es para la base.
+- **El puerto no expone el formato de Gemini.** Usa un vocabulario propio y el
+  adaptador traduce; si asomara el formato del proveedor, el orquestador
+  quedaría amarrado a él por la puerta de atrás.
+
+Las pruebas corren contra el **servidor MCP real**, atravesando el protocolo,
+con el adaptador del paquete canónico detrás. Solo se sustituye el modelo.
+
+## La aprobación la concede el orquestador, no el modelo
+
+Cuando el modelo propone un pago, el orquestador **fija `confirmado` en falso
+venga como venga** en los argumentos, ejecuta la vista previa y se detiene
+devolviendo el desglose de la prelación. La confirmación solo la pone
+`aprobarPago()`, que llama una persona.
+
+Es la tercera barrera, sobre las dos que ya tenía la herramienta. Hay una
+prueba dedicada: aunque el modelo pida explícitamente `confirmado: true`, no se
+aplica nada.
+
+Un rechazo del núcleo **no** pide aprobación, porque no hay nada que aprobar:
+el monto no exacto y el crédito incobrable vuelven al modelo para que los
+explique, con el monto correcto incluido.
+
+## Las instrucciones heredan las del módulo documental
+
+`INSTRUCCIONES_ASISTENTE` se construye **sobre** `INSTRUCCIONES_RAG` en vez de
+repetirlas. Dos juegos de reglas para el mismo asistente acabarían
+contradiciéndose, y entonces no se sabría cuál rige. Las del E4 gobiernan cómo
+tratar los documentos; las del chat agregan cómo usar las herramientas: toda
+cifra viene de una herramienta, toda consulta necesita su fecha de corte, y el
+pago jamás se propone por iniciativa propia.
+
+La pantalla del E1 consumirá este mismo orquestador: `preguntar()`,
+`aprobarPago()`, `rechazarPago()` e `historial()`. La lógica del chat no vive
+en la interfaz.
 
 ---
 
@@ -386,7 +460,7 @@ repositorio.
 npm test
 ```
 
-**520 pruebas en 38 archivos**, sin red y sin base de datos. La suite del
+**587 pruebas en 41 archivos**, sin red y sin base de datos. La suite del
 Proyecto 1 y del Proyecto 2 sigue pasando intacta: es la prueba de que el
 núcleo no se rompió.
 
@@ -397,11 +471,37 @@ núcleo no se rompió.
 | Adaptadores | Que el de PostgreSQL y el de CSV sean intercambiables y den las mismas cifras |
 | Servidor MCP | Que devuelva lo mismo que el núcleo y que rechace lo que debe rechazar |
 | RAG | Fragmentación, citación, validación y seguridad |
+| Chat y evaluación | Orquestación, memoria de la sesión, la barrera de aprobación y los 14 casos de evaluación |
 | OP-7 | Que los datos personales no sean alcanzables y que el pago inyectado no se aplique |
 
 Las pruebas que necesitan base de datos usan **PGlite**, PostgreSQL embebido en
 memoria: es Postgres real —llaves foráneas, índices únicos parciales,
-transacciones— pero sin servidor ni credenciales.
+transacciones— pero sin servidor ni credenciales. Las que necesitan un modelo
+de lenguaje usan el modelo guionizado.
+
+## Evaluación del asistente
+
+Catorce casos: las siete consultas de gerencia del Anexo B, tres operaciones,
+dos de seguridad y dos de límite. Cada uno declara qué herramientas deben
+invocarse, qué cifras deben aparecer y qué texto no debe aparecer.
+
+```bash
+npm run evals:asistente              # contra el modelo real
+npm run evals:asistente -- --caso G-7
+```
+
+**El conjunto no puede desfasarse en silencio.** Un conjunto de evaluación con
+cifras escritas a mano acaba midiendo nada: el núcleo cambia, las cifras
+esperadas se quedan viejas y la evaluación sigue dando verde contra una
+expectativa equivocada. Por eso `tests/evals/casos-asistente.test.ts`
+comprueba que cada cifra esperada **siga apareciendo en la salida real de su
+herramienta**, y que lo prohibido no aparezca: Q6.01 y Q34.47 son las cifras
+que daba el núcleo con el plan de amortización corrido un mes.
+
+Las cifras se comparan **por valor y no como texto**, porque JSON serializa
+36554.50 como `36554.5` mientras el asistente escribe `Q36,554.50` —son la
+misma cifra— y porque un `includes` daría por bueno un «130» que en realidad
+estaba dentro de «1300».
 
 ---
 
@@ -412,6 +512,8 @@ transacciones— pero sin servidor ni credenciales.
 | `npm test` | Toda la suite de pruebas |
 | `npm run cargar` | Carga el paquete canónico en la base (`-- --reiniciar` borra antes) |
 | `npm run mcp:servidor` | Levanta el servidor MCP por STDIO (`-- --csv` sin base) |
+| `npm run chat` | Chat gerencial por consola (necesita `GEMINI_API_KEY`) |
+| `npm run evals:asistente` | Evaluación de los 14 casos del asistente |
 | `npm run demo` | Recorrido del núcleo por consola |
 | `npm run contratos:openapi` | Regenera el OpenAPI desde los esquemas Zod |
 | `npm run db:probar` | Comprueba la conexión, `pgvector` y los fragmentos |
@@ -439,6 +541,7 @@ transacciones— pero sin servidor ni credenciales.
 │   ├── persistencia/           esquema, cargador canónico (E2)
 │   ├── mcp/                    servidor MCP y esquemas Zod (E3)
 │   ├── rag/                    ingesta, recuperación y citación (E4)
+│   ├── asistente/              orquestador del chat y evaluación (E5/E6)
 │   ├── contratos/              esquemas Zod → OpenAPI
 │   └── demo.ts                 recorrido del núcleo por consola
 │
@@ -482,7 +585,7 @@ Crédito aprobado       Registro del pago       Cierre diario/mensual
 |---|---|
 | Núcleo y servicios | Node.js 20+, TypeScript, Zod, date-fns |
 | Persistencia | PostgreSQL, `pgvector`, `pg`, PGlite (pruebas) |
-| Asistente | Model Context Protocol (`@modelcontextprotocol/sdk`) |
+| Asistente | Model Context Protocol (`@modelcontextprotocol/sdk`), orquestador propio |
 | RAG | Google Gemini (`gemini-embedding-001`, `gemini-3.8-flash`) |
 | Pruebas | Vitest |
 | Contratos | OpenAPI 3.1 generado desde Zod |
@@ -498,7 +601,7 @@ Crédito aprobado       Registro del pago       Cierre diario/mensual
 | Integrante | Responsabilidades |
 |---|---|
 | **Maryori Elizabeth Acifuina Juárez** | RAG con citación de fuentes (E4): ingesta del corpus, fragmentación, embeddings, almacenamiento vectorial, validación de citas, reglas de seguridad del asistente y evaluaciones. |
-| **Dalila Nineth Zacarías de León** | Servidor MCP sobre los puertos del Proyecto 1 (E3): las ocho capacidades, la acción sensible con aprobación humana, el puerto del repositorio de cartera y su adaptador de pruebas, corrección del plan de amortización y de la exigibilidad al corte, y el blindaje del servidor para OP-7. |
+| **Dalila Nineth Zacarías de León** | Servidor MCP sobre los puertos del Proyecto 1 (E3): las ocho capacidades y la acción sensible con aprobación humana. Orquestador del chat gerencial (E5) y evaluación del asistente (E6). Puerto del repositorio de cartera y su adaptador de pruebas, corrección del plan de amortización y de la exigibilidad al corte, blindaje del servidor para OP-7, y documentación técnica (E7). |
 | **Eric Alexander Barillas Orozco** | Persistencia y carga canónica (E2): esquema de base de datos, cargador idempotente con verificación SHA-256 y adaptador de PostgreSQL del repositorio de cartera. |
 | **Hilton Alexander López Ic** | |
 
