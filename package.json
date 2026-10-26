@@ -15,6 +15,7 @@
     "rag:responder": "node --env-file=.env --import tsx src/rag/probarRespuesta.ts",
     "cargar": "node --env-file=.env --import tsx src/persistencia/cargar.ts",
     "mcp:servidor": "node --env-file=.env --import tsx src/mcp/servidor.ts",
+    "chat": "node --env-file=.env --import tsx src/asistente/chat.ts",
     "rag:indexar": "node --env-file=.env --import tsx src/rag/indexarCorpus.ts"
   },
   "repository": {
