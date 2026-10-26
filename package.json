@@ -16,6 +16,7 @@
     "cargar": "node --env-file=.env --import tsx src/persistencia/cargar.ts",
     "mcp:servidor": "node --env-file=.env --import tsx src/mcp/servidor.ts",
     "chat": "node --env-file=.env --import tsx src/asistente/chat.ts",
+    "evals:asistente": "node --env-file=.env --import tsx src/asistente/evaluar.ts",
     "rag:indexar": "node --env-file=.env --import tsx src/rag/indexarCorpus.ts"
   },
   "repository": {
