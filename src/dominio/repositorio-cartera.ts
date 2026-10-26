@@ -99,6 +99,40 @@ export interface ResultadoRegistroPago {
 
 }
 
+export interface AsesorRegistrado {
+
+    readonly idAsesor: string;
+
+    readonly nombreCompleto: string;
+
+}
+
+/**
+ * Error del repositorio con codigo estable.
+ *
+ * Los adaptadores lo lanzan cuando una escritura viola una regla de
+ * integridad (duplicado, referencia inexistente). Es el repositorio quien
+ * lo decide —y no la capa HTTP— porque la unicidad y las referencias son
+ * invariantes de los datos, no del transporte.
+ */
+export type CodigoErrorRepositorio =
+    | "CLIENTE_DUPLICADO"
+    | "DPI_DUPLICADO"
+    | "CREDITO_DUPLICADO"
+    | "CLIENTE_INEXISTENTE"
+    | "ASESOR_INEXISTENTE";
+
+export class ErrorRepositorio extends Error {
+
+    constructor(
+        public readonly codigo: CodigoErrorRepositorio,
+        mensaje: string
+    ) {
+        super(mensaje);
+        this.name = "ErrorRepositorio";
+    }
+}
+
 export interface RepositorioCartera {
 
     listarCreditos(): Promise<CreditoRegistrado[]>;
@@ -118,5 +152,27 @@ export interface RepositorioCartera {
      * existe, devuelve el pago anterior sin alterar nada.
      */
     registrarPago(pago: PagoRegistrado): Promise<ResultadoRegistroPago>;
+
+    /**
+     * Todos los clientes en UNA consulta. Existe para que los listados
+     * (morosos, vencimientos) no pidan el cliente credito por credito:
+     * contra una base remota cada viaje de red cuenta.
+     */
+    listarClientes(): Promise<ClienteRegistrado[]>;
+
+    /** Asesores de credito (catalogo del paquete). */
+    listarAsesores(): Promise<AsesorRegistrado[]>;
+
+    /**
+     * Da de alta un cliente. Lanza ErrorRepositorio si el id o el DPI ya
+     * existen.
+     */
+    registrarCliente(cliente: ClienteRegistrado): Promise<void>;
+
+    /**
+     * Registra un desembolso. Lanza ErrorRepositorio si el credito ya
+     * existe o si el cliente o el asesor no existen.
+     */
+    registrarCredito(credito: CreditoRegistrado): Promise<void>;
 
 }

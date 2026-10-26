@@ -1,6 +1,8 @@
 import type { Consulta } from "../persistencia/base-datos";
 import { Dinero } from "../dominio/dinero";
 import {
+    AsesorRegistrado,
+    ErrorRepositorio,
     ClienteRegistrado,
     CreditoRegistrado,
     PagoRegistrado,
@@ -68,16 +70,124 @@ export class RepositorioCarteraPostgres implements RepositorioCartera {
             [idCliente]
         );
 
-        const f = r.rows[0];
+        return r.rows[0] ? aCliente(r.rows[0]) : undefined;
+    }
 
-        return f && {
-            idCliente: f.id_cliente,
-            nombreCompleto: f.nombre_completo,
-            dpi: f.dpi,
-            telefono: f.telefono,
-            municipio: f.municipio,
-            fechaAlta: aFecha(f.fecha_alta)
-        };
+    public async listarClientes(): Promise<ClienteRegistrado[]> {
+
+        const r = await this.db.query<FilaCliente>(
+            `SELECT id_cliente, nombre_completo, dpi, telefono, municipio,
+                    fecha_alta::text AS fecha_alta
+             FROM clientes ORDER BY id_cliente COLLATE "C"`
+        );
+
+        return r.rows.map(aCliente);
+    }
+
+    public async listarAsesores(): Promise<AsesorRegistrado[]> {
+
+        const r = await this.db.query<{ id_asesor: string; nombre_completo: string }>(
+            `SELECT id_asesor, nombre_completo FROM asesores
+             ORDER BY id_asesor COLLATE "C"`
+        );
+
+        return r.rows.map(f => ({
+            idAsesor: f.id_asesor,
+            nombreCompleto: f.nombre_completo
+        }));
+    }
+
+    /**
+     * Las comprobaciones previas dan un error claro; los indices unicos
+     * y las llaves foraneas de la base son la garantia final si dos
+     * peticiones coinciden.
+     */
+    public async registrarCliente(cliente: ClienteRegistrado): Promise<void> {
+
+        const mismoId = await this.db.query(
+            "SELECT 1 FROM clientes WHERE id_cliente = $1",
+            [cliente.idCliente]
+        );
+
+        if (mismoId.rows.length > 0) {
+            throw new ErrorRepositorio(
+                "CLIENTE_DUPLICADO",
+                `El cliente ${cliente.idCliente} ya existe.`
+            );
+        }
+
+        const mismoDpi = await this.db.query(
+            "SELECT 1 FROM clientes WHERE dpi = $1",
+            [cliente.dpi]
+        );
+
+        if (mismoDpi.rows.length > 0) {
+            throw new ErrorRepositorio(
+                "DPI_DUPLICADO",
+                `Ya existe un cliente con el DPI ${cliente.dpi}.`
+            );
+        }
+
+        await this.db.query(
+            `INSERT INTO clientes
+                 (id_cliente, nombre_completo, dpi, telefono, municipio, fecha_alta)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+                cliente.idCliente,
+                cliente.nombreCompleto,
+                cliente.dpi,
+                cliente.telefono,
+                cliente.municipio,
+                aTextoFecha(cliente.fechaAlta)
+            ]
+        );
+    }
+
+    public async registrarCredito(credito: CreditoRegistrado): Promise<void> {
+
+        const existe = async (tabla: string, columna: string, valor: string) =>
+            (await this.db.query(
+                `SELECT 1 FROM ${tabla} WHERE ${columna} = $1`, [valor]
+            )).rows.length > 0;
+
+        if (await existe("creditos", "id_credito", credito.idCredito)) {
+            throw new ErrorRepositorio(
+                "CREDITO_DUPLICADO",
+                `El credito ${credito.idCredito} ya existe.`
+            );
+        }
+
+        if (!(await existe("clientes", "id_cliente", credito.idCliente))) {
+            throw new ErrorRepositorio(
+                "CLIENTE_INEXISTENTE",
+                `El cliente ${credito.idCliente} no existe.`
+            );
+        }
+
+        if (!(await existe("asesores", "id_asesor", credito.idAsesor))) {
+            throw new ErrorRepositorio(
+                "ASESOR_INEXISTENTE",
+                `El asesor ${credito.idAsesor} no existe.`
+            );
+        }
+
+        await this.db.query(
+            `INSERT INTO creditos
+                 (id_credito, id_cliente, id_asesor, fecha_desembolso,
+                  capital_centavos, plazo_meses, tna_bps, reestructurado)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+                credito.idCredito,
+                credito.idCliente,
+                credito.idAsesor,
+                aTextoFecha(credito.fechaDesembolso),
+                credito.capital.obtenerCentavos(),
+                credito.plazoMeses,
+                // 0.36 -> 3600 bps. Math.round evita 35.99999 por float.
+                Math.round(credito.tnaAnual * 10000),
+                credito.reestructurado
+            ]
+        );
     }
 
     public async pagosDe(idCredito: string): Promise<PagoRegistrado[]> {
@@ -217,6 +327,17 @@ function aCredito(f: FilaCredito): CreditoRegistrado {
         // 3600 bps = 36.00 % = 0.36 en decimal.
         tnaAnual: f.tna_bps / 10000,
         reestructurado: f.reestructurado
+    };
+}
+
+function aCliente(f: FilaCliente): ClienteRegistrado {
+    return {
+        idCliente: f.id_cliente,
+        nombreCompleto: f.nombre_completo,
+        dpi: f.dpi,
+        telefono: f.telefono,
+        municipio: f.municipio,
+        fechaAlta: aFecha(f.fecha_alta)
     };
 }
 

@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { Dinero } from "../dominio/dinero";
 import {
+    AsesorRegistrado,
+    ErrorRepositorio,
     ClienteRegistrado,
     CreditoRegistrado,
     PagoRegistrado,
@@ -47,6 +49,8 @@ export interface ResumenCarga {
 
 export class RepositorioCarteraCsv implements RepositorioCartera {
 
+    private asesores = new Map<string, AsesorRegistrado>();
+
     private clientes = new Map<string, ClienteRegistrado>();
 
     private creditos = new Map<string, CreditoRegistrado>();
@@ -82,6 +86,7 @@ export class RepositorioCarteraCsv implements RepositorioCartera {
             );
         }
 
+        await this.cargarAsesores();
         await this.cargarClientes();
         await this.cargarCreditos();
         await this.cargarPagos();
@@ -162,7 +167,85 @@ export class RepositorioCarteraCsv implements RepositorioCartera {
 
     // ------------------------------------------------------------------
     // Lectura de los archivos
+    public async listarClientes(): Promise<ClienteRegistrado[]> {
+        await this.cargar();
+        return [...this.clientes.values()]
+            .sort((a, b) => a.idCliente.localeCompare(b.idCliente));
+    }
+
+    public async listarAsesores(): Promise<AsesorRegistrado[]> {
+        await this.cargar();
+        return [...this.asesores.values()]
+            .sort((a, b) => a.idAsesor.localeCompare(b.idAsesor));
+    }
+
+    /**
+     * Escritura en memoria: vive lo que dure el proceso. Mismas reglas
+     * que el adaptador de Postgres (unicidad de id y DPI), para que sean
+     * intercambiables.
+     */
+    public async registrarCliente(cliente: ClienteRegistrado): Promise<void> {
+
+        await this.cargar();
+
+        if (this.clientes.has(cliente.idCliente)) {
+            throw new ErrorRepositorio(
+                "CLIENTE_DUPLICADO",
+                `El cliente ${cliente.idCliente} ya existe.`
+            );
+        }
+
+        for (const existente of this.clientes.values()) {
+            if (existente.dpi === cliente.dpi) {
+                throw new ErrorRepositorio(
+                    "DPI_DUPLICADO",
+                    `Ya existe un cliente con el DPI ${cliente.dpi}.`
+                );
+            }
+        }
+
+        this.clientes.set(cliente.idCliente, cliente);
+    }
+
+    public async registrarCredito(credito: CreditoRegistrado): Promise<void> {
+
+        await this.cargar();
+
+        if (this.creditos.has(credito.idCredito)) {
+            throw new ErrorRepositorio(
+                "CREDITO_DUPLICADO",
+                `El credito ${credito.idCredito} ya existe.`
+            );
+        }
+
+        if (!this.clientes.has(credito.idCliente)) {
+            throw new ErrorRepositorio(
+                "CLIENTE_INEXISTENTE",
+                `El cliente ${credito.idCliente} no existe.`
+            );
+        }
+
+        if (!this.asesores.has(credito.idAsesor)) {
+            throw new ErrorRepositorio(
+                "ASESOR_INEXISTENTE",
+                `El asesor ${credito.idAsesor} no existe.`
+            );
+        }
+
+        this.creditos.set(credito.idCredito, credito);
+    }
+
     // ------------------------------------------------------------------
+
+    private async cargarAsesores(): Promise<void> {
+
+        for (const fila of await this.leerCsv("asesores.csv")) {
+            this.asesores.set(fila.id_asesor, {
+                idAsesor: fila.id_asesor,
+                nombreCompleto: fila.nombre_completo
+            });
+        }
+    }
 
     private async cargarClientes(): Promise<void> {
 

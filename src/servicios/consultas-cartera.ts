@@ -8,7 +8,10 @@ import { Credito } from "../dominio/credito";
 import { Dinero } from "../dominio/dinero";
 import { PlanAmortizacion } from "../dominio/plan-amortizacion";
 import { NombreEstado } from "../dominio/nombre-estado";
-import { RepositorioCartera } from "../dominio/repositorio-cartera";
+import {
+    PagoRegistrado,
+    RepositorioCartera
+} from "../dominio/repositorio-cartera";
 import { ClasificadorTramoMora, TramoMora } from "../dominio/tramo-mora";
 import {
     CatalogoPoliticasMora
@@ -679,13 +682,13 @@ export class ConsultasCartera {
         // Proyecto 1 corrigio al representar el dinero en centavos.
         let saldoTotal = Dinero.cero();
 
+        const nombres = await this.nombresDeClientes();
+
         for (const credito of enMora) {
 
             const { registro, plan } = credito.vivo;
 
-            const cliente = await this.repositorio.obtenerCliente(
-                registro.idCliente
-            );
+            const cliente = nombres.get(registro.idCliente);
 
             const saldo = credito.vivo.credito.saldoCapital;
             saldoTotal = saldoTotal.sumar(saldo);
@@ -693,7 +696,7 @@ export class ConsultasCartera {
             creditos.push({
                 idCredito: registro.idCredito,
                 idCliente: registro.idCliente,
-                nombreCliente: cliente?.nombreCompleto ?? "(desconocido)",
+                nombreCliente: cliente ?? "(desconocido)",
                 diasAtraso: credito.diasAtraso,
                 tramo: credito.tramo,
                 estado: credito.vivo.credito.nombreEstado(),
@@ -746,6 +749,8 @@ export class ConsultasCartera {
 
         let total = Dinero.cero();
 
+        const nombres = await this.nombresDeClientes();
+
         for (const credito of cartera) {
 
             if (!credito.posicion.estaActiva()) {
@@ -772,11 +777,8 @@ export class ConsultasCartera {
                 }
 
                 if (cliente === undefined) {
-                    cliente = (
-                        await this.repositorio.obtenerCliente(
-                            registro.idCliente
-                        )
-                    )?.nombreCompleto ?? "(desconocido)";
+                    cliente = nombres.get(registro.idCliente)
+                        ?? "(desconocido)";
                 }
 
                 const pendiente = cuota.totalPendiente();
@@ -1291,19 +1293,41 @@ export class ConsultasCartera {
      * tramo es una clasificacion derivada de los dias de atraso y no un
      * campo guardado (P1 6.5).
      */
+    /** Nombre de cada cliente, en UNA consulta (ver recorrerCartera). */
+    private async nombresDeClientes(): Promise<Map<string, string>> {
+
+        return new Map(
+            (await this.repositorio.listarClientes())
+                .map(c => [c.idCliente, c.nombreCompleto] as const)
+        );
+    }
+
     private async recorrerCartera(
         fechaCorte: Date
     ): Promise<CreditoAlCorte[]> {
 
         const registros = await this.repositorio.listarCreditos();
 
+        // UNA consulta de pagos, agrupada en memoria. Pedirlos credito por
+        // credito eran ~75 viajes a la base por cada carga del tablero.
+        // Agrupar conserva el orden de listarPagos, que es el mismo que
+        // entrega pagosDe: las cifras no cambian.
+        const pagosPorCredito = new Map<string, PagoRegistrado[]>();
+
+        for (const pago of await this.repositorio.listarPagos()) {
+            const lista = pagosPorCredito.get(pago.idCredito);
+            if (lista) {
+                lista.push(pago);
+            } else {
+                pagosPorCredito.set(pago.idCredito, [pago]);
+            }
+        }
+
         const alCorte: CreditoAlCorte[] = [];
 
         for (const registro of registros) {
 
-            const pagos = await this.repositorio.pagosDe(
-                registro.idCredito
-            );
+            const pagos = pagosPorCredito.get(registro.idCredito) ?? [];
 
             const vivo = this.reconstructor.reconstruir(registro, pagos);
 
