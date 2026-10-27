@@ -182,7 +182,7 @@ h += [
         "portada",
     ),
     Spacer(1, 1.6 * cm),
-    p("25 de octubre de 2026", "portada"),
+    p("26 de octubre de 2026", "portada"),
     PageBreak(),
 ]
 
@@ -237,9 +237,12 @@ h += [
    +------+---------+            +---------+-----------+
           |                                |
    +------v---------+            +---------v-----------+
-   |  Corpus        |            |  ConsultasCartera   |
-   |  7 documentos  |            |  (servicios)        |
-   +----------------+            +---------+-----------+
+   |  Corpus        |            |  ConsultasCartera   |<--+
+   |  7 documentos  |            |  (servicios)        |   |
+   +----------------+            +---------+-----------+   |
+                                           |         API REST
+                                           |         (E1, Express)
+                                           |          el frontend
                                            |
                         +------------------v------------------+
                         |   NUCLEO DE DOMINIO (P1 / P2)       |
@@ -263,7 +266,26 @@ h += [
         "<i>cuanto debe este credito</i>. Mezclarlas seria el error que el "
         "enunciado busca evitar: un modelo de lenguaje estimando cifras."
     ),
-    p("2.1 Los dos adaptadores del repositorio", "h2"),
+    p("2.1 Una sola fuente de cifras para las dos entradas", "h2"),
+    p(
+        "El servidor MCP y la API REST son DOS ADAPTADORES del mismo "
+        "servicio de consultas, y reutilizan los mismos esquemas Zod. No "
+        "es un detalle de organizacion: es lo que impide que el tablero "
+        "que ve la gerencia y la respuesta que da el chat difieran. Si "
+        "cada entrada calculara por su cuenta habria dos fuentes de "
+        "verdad para la misma cifra, y dos fuentes de verdad siempre "
+        "divergen."
+    ),
+    p(
+        "La API hace cumplir las mismas reglas: la fecha de corte es "
+        "obligatoria en toda consulta, y un pago sin confirmacion "
+        "explicita solo devuelve la vista previa. El perfil —asesor o "
+        "gerencia— se verifica en el servidor y no en la interfaz, porque "
+        "ocultar un boton no es un control de acceso. No es "
+        "autenticacion: el enunciado la deja expresamente fuera en su "
+        "seccion 3.1, y pide unicamente distinguir los dos perfiles."
+    ),
+    p("2.2 Los dos adaptadores del repositorio", "h2"),
     p(
         "El puerto <font name='Courier' size='9'>RepositorioCartera</font> "
         "devuelve <b>hechos registrados</b> -un desembolso y sus pagos-, "
@@ -742,8 +764,8 @@ h += [
         """
   npm test
 
-  Test Files   41 passed (41)
-       Tests  587 passed (587)
+  Test Files   44 passed (44)
+       Tests  630 passed (630)
         """
     ),
     tabla(
@@ -760,6 +782,9 @@ h += [
              "dos adaptadores"],
             ["Modulo RAG (E4)", "61",
              "Fragmentacion, citacion, validacion y reglas de seguridad"],
+            ["API REST (E1)", "43",
+             "Rutas, perfiles verificados en el servidor, validacion de "
+             "entrada y originacion de creditos"],
             ["Chat y evaluacion (E5 y E6)", "67",
              "Orquestacion, memoria de la sesion, la barrera de aprobacion "
              "y los catorce casos de evaluacion"],
@@ -950,7 +975,8 @@ h += [
     tabla(
         ["Entregable", "Estado"],
         [
-            ["E1 - Interfaz de usuario implementada", "Pendiente"],
+            ["E1 - Interfaz de usuario implementada",
+             "API REST terminada; falta el frontend en React"],
             ["E2 - Persistencia y carga canonica", "Terminado"],
             ["E3 - Servidor MCP sobre los puertos del Proyecto 1",
              "Terminado"],
@@ -959,7 +985,7 @@ h += [
              "Orquestador terminado y probado; falta la pantalla, que es "
              "del E1"],
             ["E6 - Pruebas",
-             "Terminado: 587 pruebas, incluida la evaluacion del "
+             "Terminado: 630 pruebas, incluida la evaluacion del "
              "asistente"],
             ["E7 - Repositorio, documentacion y video",
              "README y este documento al dia; falta el video"],
@@ -985,6 +1011,10 @@ h += [
         "El asistente se agrega sobre los puertos existentes. Los dos "
         "adaptadores del repositorio son intercambiables y se comprueba "
         "que el nucleo produce identicas cifras con cualquiera de los dos.",
+
+        "El servidor MCP y la API REST son dos adaptadores del mismo "
+        "servicio y comparten sus esquemas, asi que el tablero y el chat "
+        "no pueden dar cifras distintas.",
 
         "Ninguna cifra se calcula fuera del nucleo, y ninguna herramienta "
         "lee el reloj del sistema.",

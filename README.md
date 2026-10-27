@@ -8,9 +8,10 @@
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
 ![Node](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-587%20pruebas-6E9F18)
+![Vitest](https://img.shields.io/badge/Vitest-630%20pruebas-6E9F18)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-9%20herramientas-D97757)
+![Express](https://img.shields.io/badge/Express-API%20REST-000000?logo=express&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Gemini-RAG-4285F4?logo=google&logoColor=white)
 ![Arquitectura](https://img.shields.io/badge/Arquitectura-Hexagonal-blue)
 
@@ -42,12 +43,12 @@ Entregables del **Proyecto Final**.
 
 | Entregable | Descripción | Estado |
 |---|---|---|
-| **E1** | Interfaz de usuario implementada (7 pantallas, 3 flujos) | Pendiente |
+| **E1** | Interfaz de usuario implementada (7 pantallas, 3 flujos) | API REST terminada; falta el frontend en React |
 | **E2** | Persistencia y carga canónica | Terminado |
 | **E3** | Servidor MCP sobre los puertos del Proyecto 1 | Terminado |
 | **E4** | RAG con citación de fuentes | Terminado |
 | **E5** | Chat gerencial integrado a la interfaz | Orquestador terminado y probado; falta la pantalla, que es del E1 |
-| **E6** | Pruebas | Terminado: 587 pruebas, incluida la evaluación del asistente |
+| **E6** | Pruebas | Terminado: 630 pruebas, incluida la evaluación del asistente |
 | **E7** | Repositorio, documentación y video | README y documento técnico al día; falta el video |
 
 ---
@@ -144,7 +145,28 @@ Habla por **STDIO**, el transporte que esperan los clientes MCP. Esto permite
 ejercitar las ocho capacidades con cualquier cliente sin esperar la interfaz
 del E1.
 
-## 7 · Conversar con el asistente
+## 7 · Levantar la API
+
+```bash
+npm run api          # http://127.0.0.1:3000
+```
+
+Es un adaptador delgado sobre los mismos servicios que usa el servidor MCP, y
+reutiliza sus esquemas Zod: **el tablero y el chat no pueden dar cifras
+distintas**. Escucha solo en `127.0.0.1`.
+
+El perfil viaja en el encabezado `X-Perfil: asesor | gerencia` y se verifica
+en el servidor. No es autenticación —el enunciado la deja expresamente fuera
+en su sección 3.1— sino la separación de responsabilidades que sí pide:
+
+```bash
+curl -H "X-Perfil: gerencia" \
+  "http://127.0.0.1:3000/api/cartera?fechaCorte=2026-10-31"
+```
+
+Detalle en [`docs/api/Readme Sección API.md`](docs/api/Readme%20Secci%C3%B3n%20API.md).
+
+## 8 · Conversar con el asistente
 
 ```bash
 npm run chat                    # sobre PostgreSQL
@@ -154,8 +176,8 @@ npm run evals:asistente         # la evaluación de los 14 casos
 
 Ambos necesitan `GEMINI_API_KEY`.
 
-> La **interfaz web (E1)** todavía no está implementada, así que el chat se
-> opera por consola. Esa consola no es el entregable del E5 —que pide el chat
+> El **frontend en React (E1)** todavía no está implementado —la API sí—, así
+> que el chat se opera por consola. Esa consola no es el entregable del E5 —que pide el chat
 > dentro de la aplicación— sino el arnés con el que se maneja y se demuestra
 > el orquestador mientras la pantalla se construye.
 
@@ -191,9 +213,11 @@ un **adaptador**.
      │  ConsultasCartera (servicios) │
      └───────────────────────────────┘
                  ▼
-     ┌───────────────────────────────┐
-     │   Servidor MCP (E3)           │
-     └───────────────────────────────┘
+     ┌──────────────┬────────────────┐
+     │ Servidor MCP │  API REST (E1) │
+     │     (E3)     │   Express      │
+     └──────────────┴────────────────┘
+       el chat (E5)      el frontend
 ```
 
 **Los dos adaptadores son intercambiables.** `tests/repositorio-cartera-postgres.test.ts`
@@ -460,7 +484,7 @@ repositorio.
 npm test
 ```
 
-**587 pruebas en 41 archivos**, sin red y sin base de datos. La suite del
+**630 pruebas en 44 archivos**, sin red y sin base de datos. La suite del
 Proyecto 1 y del Proyecto 2 sigue pasando intacta: es la prueba de que el
 núcleo no se rompió.
 
@@ -469,6 +493,7 @@ núcleo no se rompió.
 | Núcleo (P1 / P2) | Dinero, plan francés, prelación, estados, cartera en riesgo, políticas de mora y los oráculos del enunciado |
 | Cargador canónico | Conteos, idempotencia y verificación de la huella SHA-256 |
 | Adaptadores | Que el de PostgreSQL y el de CSV sean intercambiables y den las mismas cifras |
+| API REST | Rutas, perfiles, validación de entrada y originación de créditos |
 | Servidor MCP | Que devuelva lo mismo que el núcleo y que rechace lo que debe rechazar |
 | RAG | Fragmentación, citación, validación y seguridad |
 | Chat y evaluación | Orquestación, memoria de la sesión, la barrera de aprobación y los 14 casos de evaluación |
@@ -511,6 +536,7 @@ estaba dentro de «1300».
 |---|---|
 | `npm test` | Toda la suite de pruebas |
 | `npm run cargar` | Carga el paquete canónico en la base (`-- --reiniciar` borra antes) |
+| `npm run api` | Levanta la API REST en el puerto 3000 |
 | `npm run mcp:servidor` | Levanta el servidor MCP por STDIO (`-- --csv` sin base) |
 | `npm run chat` | Chat gerencial por consola (necesita `GEMINI_API_KEY`) |
 | `npm run evals:asistente` | Evaluación de los 14 casos del asistente |
@@ -539,6 +565,7 @@ estaba dentro de «1300».
 │   ├── estrategias/            Strategy: cálculo francés, adelanto
 │   ├── adaptadores/            CSV y PostgreSQL (mismo puerto)
 │   ├── persistencia/           esquema, cargador canónico (E2)
+│   ├── api/                    API REST sobre los servicios (E1)
 │   ├── mcp/                    servidor MCP y esquemas Zod (E3)
 │   ├── rag/                    ingesta, recuperación y citación (E4)
 │   ├── asistente/              orquestador del chat y evaluación (E5/E6)
@@ -584,6 +611,7 @@ Crédito aprobado       Registro del pago       Cierre diario/mensual
 | Área | Herramientas |
 |---|---|
 | Núcleo y servicios | Node.js 20+, TypeScript, Zod, date-fns |
+| API | Express 5 |
 | Persistencia | PostgreSQL, `pgvector`, `pg`, PGlite (pruebas) |
 | Asistente | Model Context Protocol (`@modelcontextprotocol/sdk`), orquestador propio |
 | RAG | Google Gemini (`gemini-embedding-001`, `gemini-3.8-flash`) |
@@ -603,7 +631,7 @@ Crédito aprobado       Registro del pago       Cierre diario/mensual
 | **Maryori Elizabeth Acifuina Juárez** | RAG con citación de fuentes (E4): ingesta del corpus, fragmentación, embeddings, almacenamiento vectorial, validación de citas, reglas de seguridad del asistente y evaluaciones. |
 | **Dalila Nineth Zacarías de León** | Servidor MCP sobre los puertos del Proyecto 1 (E3): las ocho capacidades y la acción sensible con aprobación humana. Orquestador del chat gerencial (E5) y evaluación del asistente (E6). Puerto del repositorio de cartera y su adaptador de pruebas, corrección del plan de amortización y de la exigibilidad al corte, blindaje del servidor para OP-7, y documentación técnica (E7). |
 | **Eric Alexander Barillas Orozco** | Persistencia y carga canónica (E2): esquema de base de datos, cargador idempotente con verificación SHA-256 y adaptador de PostgreSQL del repositorio de cartera. |
-| **Hilton Alexander López Ic** | |
+| **Hilton Alexander López Ic** | API REST con Express (E1): rutas de los siete casos de uso, perfiles asesor y gerencia verificados en el servidor, y los servicios de originación de créditos y cobro. |
 
 ## Etapas anteriores
 
