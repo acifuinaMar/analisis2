@@ -182,7 +182,7 @@ h += [
         "portada",
     ),
     Spacer(1, 1.6 * cm),
-    p("26 de octubre de 2026", "portada"),
+    p("28 de octubre de 2026", "portada"),
     PageBreak(),
 ]
 
@@ -516,7 +516,40 @@ h += [
         "monto no exacto y el credito incobrable vuelven al modelo para "
         "que los explique."
     ),
-    p("5.3 Las instrucciones heredan las del modulo documental", "h2"),
+    p("5.3 Aprobar y poder aprobar son dos cosas distintas", "h2"),
+    p(
+        "La aprobacion humana y el perfil responden preguntas diferentes, "
+        "y el pago necesita las dos respuestas. La aprobacion responde si "
+        "una persona dijo que si a ESTE monto, y la concede el metodo que "
+        "llama la interfaz. El perfil responde si esa persona tiene "
+        "permiso de mover dinero, y lo decide la sesion."
+    ),
+    p(
+        "Hacen falta las dos. Un gerente que aprueba pasa el primer "
+        "control y falla el segundo: si el chat exigiera solo la "
+        "aprobacion, seria la puerta de atras del modelo de permisos, "
+        "porque registrar un pago esta reservado al perfil asesor en la "
+        "API y lo que la gerencia no puede hacer por REST lo conseguiria "
+        "pidiendoselo al asistente. El chat verifica los dos, y el metodo "
+        "de aprobacion es el unico punto donde se cruzan."
+    ),
+    p(
+        "La vista previa si corre para cualquier perfil, y no es un "
+        "descuido: no escribe nada, y revisar el desglose de la prelacion "
+        "antes de que el pago ocurra es justo lo que la gerencia necesita "
+        "poder hacer. Lo que el perfil decide es quien puede aplicarlo "
+        "despues."
+    ),
+    p(
+        "El perfil se verifica ANTES de mirar si hay un pago pendiente. "
+        "Un control de acceso no debe depender del estado que protege, ni "
+        "delatar en su mensaje de error si habia una operacion en curso. "
+        "Y la lista de perfiles vive en un modulo que COMPARTEN la API y "
+        "el chat: dos listas que deberian ser iguales acaban divergiendo, "
+        "y el dia que divergieran el chat permitiria algo que la API "
+        "prohibe. Una prueba compara las dos."
+    ),
+    p("5.4 Las instrucciones heredan las del modulo documental", "h2"),
     p(
         "Las reglas del asistente se construyen SOBRE las del modulo RAG "
         "en vez de repetirlas. Dos juegos de reglas para el mismo "
@@ -765,7 +798,7 @@ h += [
   npm test
 
   Test Files   44 passed (44)
-       Tests  630 passed (630)
+       Tests  639 passed (639)
         """
     ),
     tabla(
@@ -785,9 +818,10 @@ h += [
             ["API REST (E1)", "43",
              "Rutas, perfiles verificados en el servidor, validacion de "
              "entrada y originacion de creditos"],
-            ["Chat y evaluacion (E5 y E6)", "67",
-             "Orquestacion, memoria de la sesion, la barrera de aprobacion "
-             "y los catorce casos de evaluacion"],
+            ["Chat y evaluacion (E5 y E6)", "76",
+             "Orquestacion, memoria de la sesion, la barrera de "
+             "aprobacion, el perfil que puede aplicar el pago y los "
+             "catorce casos de evaluacion"],
             ["Resistencia a inyeccion (OP-7)", "12",
              "Que los datos personales no sean alcanzables y que el pago "
              "inyectado no se aplique"],
@@ -985,7 +1019,7 @@ h += [
              "Orquestador terminado y probado; falta la pantalla, que es "
              "del E1"],
             ["E6 - Pruebas",
-             "Terminado: 630 pruebas, incluida la evaluacion del "
+             "Terminado: 639 pruebas, incluida la evaluacion del "
              "asistente"],
             ["E7 - Repositorio, documentacion y video",
              "README y este documento al dia; falta el video"],

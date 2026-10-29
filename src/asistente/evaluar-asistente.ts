@@ -1,3 +1,4 @@
+import type { Perfil } from "../acceso/perfil";
 import {
     CASOS_ASISTENTE,
     type CasoAsistente,
@@ -233,7 +234,7 @@ async function evaluarCaso(
 }
 
 export async function evaluarAsistente(
-    crearChat: () => Promise<Orquestador>,
+    crearChat: (perfil: Perfil) => Promise<Orquestador>,
     opciones: {
         casos?: ReadonlyArray<CasoAsistente>;
         modelo?: string;
@@ -246,7 +247,10 @@ export async function evaluarAsistente(
 
     for (const caso of casos) {
 
-        const resultado = await evaluarCaso(caso, await crearChat());
+        const resultado = await evaluarCaso(
+            caso,
+            await crearChat(caso.perfil ?? "gerencia")
+        );
 
         resultados.push(resultado);
         opciones.alTerminarCaso?.(resultado);

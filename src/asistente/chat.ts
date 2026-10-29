@@ -6,6 +6,7 @@ import {
     InMemoryTransport
 } from "@modelcontextprotocol/sdk/inMemory.js";
 
+import { PERFILES, type Perfil } from "../acceso/perfil";
 import {
     RepositorioCarteraCsv
 } from "../adaptadores/repositorio-cartera-csv";
@@ -123,6 +124,33 @@ function mostrarPropuesta(previa: Record<string, unknown>): void {
     );
 }
 
+/**
+ * El perfil con el que se abre el chat: `-- --perfil asesor`.
+ *
+ * Por omision GERENCIA, que es el perfil del chat gerencial y tambien el
+ * que menos puede: si alguien olvida la bandera, el chat queda en solo
+ * consulta. Equivocarse hacia el lado que no mueve dinero.
+ */
+function perfilPedido(): Perfil {
+
+    const i = process.argv.indexOf("--perfil");
+    const pedido = i >= 0 ? process.argv[i + 1] : undefined;
+
+    if (pedido === undefined) {
+        return "gerencia";
+    }
+
+    if (!(PERFILES as readonly string[]).includes(pedido)) {
+        console.error(
+            `El perfil '${pedido}' no existe. Use `
+            + `${PERFILES.join(" o ")}.`
+        );
+        process.exit(1);
+    }
+
+    return pedido as Perfil;
+}
+
 async function principal(): Promise<void> {
 
     if (!process.env.GEMINI_API_KEY?.trim()) {
@@ -132,6 +160,8 @@ async function principal(): Promise<void> {
         );
         process.exit(1);
     }
+
+    const perfil = perfilPedido();
 
     const { repo, donde, cerrar } = repositorio();
 
@@ -147,6 +177,7 @@ async function principal(): Promise<void> {
     const chat = new Orquestador(
         new ModeloGemini(),
         new HerramientasMcp(cliente),
+        perfil,
         documental
     );
 
@@ -154,6 +185,11 @@ async function principal(): Promise<void> {
 
     console.log(`\n${AZUL}Credito Vecino - chat gerencial${FIN}`);
     console.log(`${GRIS}Cartera: ${donde}${FIN}`);
+    console.log(
+        `${GRIS}Perfil: ${perfil}`
+        + `${chat.puedeAprobar() ? "" : " (consulta; no registra pagos)"}`
+        + `${FIN}`
+    );
     console.log(
         `${GRIS}Escriba su pregunta. "salir" termina, "nueva" empieza de `
         + `cero.${FIN}\n`

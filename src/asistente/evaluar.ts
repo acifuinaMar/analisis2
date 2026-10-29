@@ -6,6 +6,7 @@ import {
     InMemoryTransport
 } from "@modelcontextprotocol/sdk/inMemory.js";
 
+import type { Perfil } from "../acceso/perfil";
 import {
     RepositorioCarteraCsv
 } from "../adaptadores/repositorio-cartera-csv";
@@ -64,7 +65,10 @@ const documental: ConsultaDocumental = {
  * cargada. El adaptador de archivos se reconstruye entero, asi que si un
  * caso escribiera, el siguiente no lo veria.
  */
-async function nuevoChat(conRag: boolean): Promise<Orquestador> {
+async function nuevoChat(
+    conRag: boolean,
+    perfil: Perfil
+): Promise<Orquestador> {
 
     const servidor = crearServidorMcp(
         new RepositorioCarteraCsv(process.env.CV_DATA_DIR ?? "")
@@ -81,6 +85,7 @@ async function nuevoChat(conRag: boolean): Promise<Orquestador> {
     return new Orquestador(
         new ModeloGemini(),
         new HerramientasMcp(cliente),
+        perfil,
         conRag ? documental : undefined
     );
 }
@@ -139,7 +144,7 @@ async function principal(): Promise<void> {
     );
 
     const informe = await evaluarAsistente(
-        () => nuevoChat(conRag),
+        (perfil) => nuevoChat(conRag, perfil),
         {
             casos,
             modelo: new ModeloGemini().nombre,

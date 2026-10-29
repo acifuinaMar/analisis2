@@ -1,3 +1,8 @@
+import {
+    PERFIL_QUE_REGISTRA_PAGOS,
+    puedeRegistrarPagos,
+    type Perfil
+} from "../acceso/perfil";
 import { INSTRUCCIONES_ASISTENTE } from "./instrucciones-asistente";
 import type { InvocadorHerramientas } from "./herramientas-mcp";
 import type {
@@ -23,6 +28,22 @@ import type {
  * No depende de la interfaz. La pantalla del E1 y el guion de pruebas
  * consumen el mismo objeto, asi que la logica del chat se prueba sin
  * navegador y sin llamar a un modelo real.
+ *
+ * DOS CONTROLES DISTINTOS protegen el pago, y conviene no confundirlos
+ * porque responden preguntas diferentes:
+ *
+ *   aprobacion humana  responde "dijo una persona que si a ESTE monto?"
+ *                      y la concede aprobarPago(), nunca el modelo.
+ *
+ *   perfil             responde "tiene esta persona permiso de mover
+ *                      dinero?" y lo decide el perfil de la sesion.
+ *
+ * Hacen falta los dos. Un gerente que aprueba pasa el primero y falla el
+ * segundo: si el chat solo exigiera la aprobacion, seria la puerta de
+ * atras del modelo de permisos de la API --lo que el perfil no puede
+ * hacer por REST lo haria pidiendoselo al asistente--. El perfil se
+ * comparte con la API desde src/acceso/perfil.ts para que no haya dos
+ * reglas que puedan divergir.
  */
 
 /** Nombre de la herramienta sensible. Vive aqui porque hay que vigilarla. */
@@ -40,6 +61,54 @@ const HERRAMIENTA_DOCUMENTAL = "consultar_politicas";
  * gastar llamadas.
  */
 const MAX_RONDAS = 6;
+
+/**
+ * El perfil que conversa no tiene permiso para la accion.
+ *
+ * Es una excepcion y no una respuesta del chat a proposito: equivale al
+ * 403 de la API. Una negativa que redactara el modelo se podria matizar
+ * -- "podria aplicarlo si..." --; una excepcion no se matiza.
+ */
+export class ErrorPerfilSinPermiso extends Error {
+
+    public readonly codigo = "PERFIL_SIN_PERMISO";
+
+    constructor(public readonly perfil: Perfil, mensaje: string) {
+        super(mensaje);
+        this.name = "ErrorPerfilSinPermiso";
+    }
+}
+
+/**
+ * Lo que se le dice al modelo sobre con quien habla.
+ *
+ * No es el control --el control es la verificacion en aprobarPago()--
+ * sino cortesia: sin esto el asistente le ofreceria a la gerencia aplicar
+ * un pago que luego le va a ser negado, y prometer algo que no se puede
+ * cumplir es peor que no ofrecerlo.
+ */
+function notaDelPerfil(perfil: Perfil): string {
+
+    if (puedeRegistrarPagos(perfil)) {
+        return `
+
+SOBRE QUIEN TE HABLA:
+
+22. Hablas con el perfil ASESOR, que si puede registrar pagos. Cuando te
+    pida uno, proponlo y espera su aprobacion segun las reglas 17 a 20.
+`;
+    }
+
+    return `
+
+SOBRE QUIEN TE HABLA:
+
+22. Hablas con el perfil GERENCIA, que consulta la cartera pero NO
+    registra pagos. Si te piden registrar uno, muestra el desglose de la
+    prelacion para que lo revisen y aclara que la aplicacion la hace un
+    asesor. No digas que quedo aplicado ni pidas que lo aprueben.
+`;
+}
 
 export interface PropuestaPago {
 
@@ -82,12 +151,34 @@ export class Orquestador {
 
     private pendiente: PropuestaPago | undefined;
 
+    /** Las instrucciones del asistente mas la nota del perfil. */
+    private readonly sistema: string;
+
+    /**
+     * El perfil es OBLIGATORIO y va antes de los parametros opcionales a
+     * proposito: sin valor por omision no hay forma de abrir el chat sin
+     * decidir quien habla, y por lo tanto no hay forma de exponer la
+     * escritura por descuido.
+     */
     constructor(
         private readonly modelo: ModeloLenguaje,
         private readonly herramientas: InvocadorHerramientas,
+        private readonly perfil: Perfil,
         private readonly documental?: ConsultaDocumental,
-        private readonly instrucciones: string = INSTRUCCIONES_ASISTENTE
-    ) {}
+        instrucciones: string = INSTRUCCIONES_ASISTENTE
+    ) {
+        this.sistema = instrucciones.trimEnd() + notaDelPerfil(perfil);
+    }
+
+    /** El perfil de la sesion, para que la interfaz sepa que pintar. */
+    public perfilDeLaSesion(): Perfil {
+        return this.perfil;
+    }
+
+    /** Si este perfil puede llegar a aplicar el pago que se proponga. */
+    public puedeAprobar(): boolean {
+        return puedeRegistrarPagos(this.perfil);
+    }
 
     // ------------------------------------------------------------------
     // Conversacion
@@ -110,8 +201,24 @@ export class Orquestador {
      * La confirmacion la pone el ORQUESTADOR, nunca el modelo: por eso
      * `confirmado` se fija aqui y no se toma de los argumentos que el
      * modelo propuso. Un modelo comprometido no tiene por donde activarla.
+     *
+     * Y la pone solo si el perfil puede. Son los dos controles del
+     * encabezado, y este metodo es el unico punto donde se cruzan.
      */
     public async aprobarPago(): Promise<RespuestaChat> {
+
+        // El perfil se verifica ANTES de mirar si hay algo pendiente: un
+        // control de acceso no debe depender del estado que protege, ni
+        // revelar en su mensaje de error si habia un pago en curso.
+        if (!puedeRegistrarPagos(this.perfil)) {
+            throw new ErrorPerfilSinPermiso(
+                this.perfil,
+                `El perfil '${this.perfil}' no puede registrar pagos. La `
+                + `vista previa con el desglose queda disponible, pero `
+                + `aplicar el pago le corresponde al perfil `
+                + `'${PERFIL_QUE_REGISTRA_PAGOS}'.`
+            );
+        }
 
         const propuesta = this.pendiente;
 
@@ -191,7 +298,7 @@ export class Orquestador {
         for (let ronda = 0; ronda < MAX_RONDAS; ronda++) {
 
             const turno = await this.modelo.responder(
-                this.instrucciones,
+                this.sistema,
                 this.mensajes,
                 catalogo
             );
@@ -262,6 +369,11 @@ export class Orquestador {
      * el resultado se le devuelve al modelo para que lo explique: un
      * rechazo por monto no exacto o una clave repetida no necesitan la
      * aprobacion de nadie, porque no hay nada que aprobar.
+     *
+     * Esto corre para CUALQUIER perfil, y no es un descuido: la vista
+     * previa no escribe nada, y ver el desglose de la prelacion antes de
+     * que el pago ocurra es justo lo que la gerencia necesita poder
+     * revisar. Lo que el perfil decide es quien puede aplicarlo despues.
      */
     private async prepararPago(
         llamada: LlamadaHerramienta

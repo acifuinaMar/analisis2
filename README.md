@@ -8,7 +8,7 @@
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
 ![Node](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-630%20pruebas-6E9F18)
+![Vitest](https://img.shields.io/badge/Vitest-639%20pruebas-6E9F18)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-9%20herramientas-D97757)
 ![Express](https://img.shields.io/badge/Express-API%20REST-000000?logo=express&logoColor=white)
@@ -48,7 +48,7 @@ Entregables del **Proyecto Final**.
 | **E3** | Servidor MCP sobre los puertos del Proyecto 1 | Terminado |
 | **E4** | RAG con citación de fuentes | Terminado |
 | **E5** | Chat gerencial integrado a la interfaz | Orquestador terminado y probado; falta la pantalla, que es del E1 |
-| **E6** | Pruebas | Terminado: 630 pruebas, incluida la evaluación del asistente |
+| **E6** | Pruebas | Terminado: 639 pruebas, incluida la evaluación del asistente |
 | **E7** | Repositorio, documentación y video | README y documento técnico al día; falta el video |
 
 ---
@@ -169,12 +169,16 @@ Detalle en [`docs/api/Readme Sección API.md`](docs/api/Readme%20Secci%C3%B3n%20
 ## 8 · Conversar con el asistente
 
 ```bash
-npm run chat                    # sobre PostgreSQL
-npm run chat -- --csv           # sobre el paquete en archivos
-npm run evals:asistente         # la evaluación de los 14 casos
+npm run chat                            # perfil gerencia (solo consulta)
+npm run chat -- --perfil asesor         # el perfil que sí registra pagos
+npm run chat -- --csv                   # sobre el paquete en archivos
+npm run evals:asistente                 # la evaluación de los 14 casos
 ```
 
 Ambos necesitan `GEMINI_API_KEY`.
+
+Sin la bandera el chat abre como **gerencia**, que es el perfil que menos
+puede. Equivocarse por olvido cae del lado que no mueve dinero.
 
 > El **frontend en React (E1)** todavía no está implementado —la API sí—, así
 > que el chat se opera por consola. Esa consola no es el entregable del E5 —que pide el chat
@@ -345,6 +349,36 @@ Un rechazo del núcleo **no** pide aprobación, porque no hay nada que aprobar:
 el monto no exacto y el crédito incobrable vuelven al modelo para que los
 explique, con el monto correcto incluido.
 
+## Aprobar y poder aprobar son dos cosas distintas
+
+La aprobación humana y el perfil responden preguntas diferentes, y el pago
+necesita las dos respuestas:
+
+| Control | Qué pregunta | Quién lo resuelve |
+|---|---|---|
+| Aprobación humana | ¿dijo una persona que sí a **este** monto? | `aprobarPago()`, nunca el modelo |
+| Perfil | ¿tiene esa persona permiso de **mover dinero**? | el perfil de la sesión |
+
+**Un gerente que aprueba pasa el primero y falla el segundo.** Si el chat
+exigiera solo la aprobación, sería la puerta de atrás del modelo de permisos:
+registrar un pago es `soloAsesor` en la API, así que lo que el perfil gerencia
+no puede hacer por REST lo conseguiría pidiéndoselo al asistente. El chat
+verifica los dos, y `aprobarPago()` es el único punto donde se cruzan.
+
+La **vista previa sí corre para cualquier perfil**, y no es un descuido: no
+escribe nada, y revisar el desglose de la prelación antes de que el pago ocurra
+es justo lo que la gerencia necesita poder hacer. Lo que el perfil decide es
+quién puede aplicarlo después.
+
+El perfil se verifica **antes** de mirar si hay un pago pendiente. Un control
+de acceso no debe depender del estado que protege, ni delatar en su mensaje de
+error si había una operación en curso.
+
+> La lista de perfiles vive en [`src/acceso/perfil.ts`](src/acceso/perfil.ts) y
+> **la comparten la API y el chat**. Dos listas que deberían ser iguales acaban
+> divergiendo, y el día que divergieran el chat permitiría algo que la API
+> prohíbe. Hay una prueba que compara las dos.
+
 ## Las instrucciones heredan las del módulo documental
 
 `INSTRUCCIONES_ASISTENTE` se construye **sobre** `INSTRUCCIONES_RAG` en vez de
@@ -484,7 +518,7 @@ repositorio.
 npm test
 ```
 
-**630 pruebas en 44 archivos**, sin red y sin base de datos. La suite del
+**639 pruebas en 44 archivos**, sin red y sin base de datos. La suite del
 Proyecto 1 y del Proyecto 2 sigue pasando intacta: es la prueba de que el
 núcleo no se rompió.
 
@@ -496,7 +530,7 @@ núcleo no se rompió.
 | API REST | Rutas, perfiles, validación de entrada y originación de créditos |
 | Servidor MCP | Que devuelva lo mismo que el núcleo y que rechace lo que debe rechazar |
 | RAG | Fragmentación, citación, validación y seguridad |
-| Chat y evaluación | Orquestación, memoria de la sesión, la barrera de aprobación y los 14 casos de evaluación |
+| Chat y evaluación | Orquestación, memoria de la sesión, la barrera de aprobación, el perfil que puede aplicar el pago y los 14 casos de evaluación |
 | OP-7 | Que los datos personales no sean alcanzables y que el pago inyectado no se aplique |
 
 Las pruebas que necesitan base de datos usan **PGlite**, PostgreSQL embebido en
@@ -538,7 +572,7 @@ estaba dentro de «1300».
 | `npm run cargar` | Carga el paquete canónico en la base (`-- --reiniciar` borra antes) |
 | `npm run api` | Levanta la API REST en el puerto 3000 |
 | `npm run mcp:servidor` | Levanta el servidor MCP por STDIO (`-- --csv` sin base) |
-| `npm run chat` | Chat gerencial por consola (necesita `GEMINI_API_KEY`) |
+| `npm run chat` | Chat gerencial por consola (`-- --perfil asesor` para registrar pagos) |
 | `npm run evals:asistente` | Evaluación de los 14 casos del asistente |
 | `npm run demo` | Recorrido del núcleo por consola |
 | `npm run contratos:openapi` | Regenera el OpenAPI desde los esquemas Zod |
@@ -565,6 +599,7 @@ estaba dentro de «1300».
 │   ├── estrategias/            Strategy: cálculo francés, adelanto
 │   ├── adaptadores/            CSV y PostgreSQL (mismo puerto)
 │   ├── persistencia/           esquema, cargador canónico (E2)
+│   ├── acceso/                 perfiles, compartidos por la API y el chat
 │   ├── api/                    API REST sobre los servicios (E1)
 │   ├── mcp/                    servidor MCP y esquemas Zod (E3)
 │   ├── rag/                    ingesta, recuperación y citación (E4)
@@ -629,7 +664,7 @@ Crédito aprobado       Registro del pago       Cierre diario/mensual
 | Integrante | Responsabilidades |
 |---|---|
 | **Maryori Elizabeth Acifuina Juárez** | RAG con citación de fuentes (E4): ingesta del corpus, fragmentación, embeddings, almacenamiento vectorial, validación de citas, reglas de seguridad del asistente y evaluaciones. |
-| **Dalila Nineth Zacarías de León** | Servidor MCP sobre los puertos del Proyecto 1 (E3): las ocho capacidades y la acción sensible con aprobación humana. Orquestador del chat gerencial (E5) y evaluación del asistente (E6). Puerto del repositorio de cartera y su adaptador de pruebas, corrección del plan de amortización y de la exigibilidad al corte, blindaje del servidor para OP-7, y documentación técnica (E7). |
+| **Dalila Nineth Zacarías de León** | Servidor MCP sobre los puertos del Proyecto 1 (E3): las ocho capacidades y la acción sensible con aprobación humana. Orquestador del chat gerencial (E5) y evaluación del asistente (E6). Puerto del repositorio de cartera y su adaptador de pruebas, corrección del plan de amortización y de la exigibilidad al corte, blindaje del servidor para OP-7, el perfil que hace cumplir el menor privilegio en el chat, y documentación técnica (E7). |
 | **Eric Alexander Barillas Orozco** | Persistencia y carga canónica (E2): esquema de base de datos, cargador idempotente con verificación SHA-256 y adaptador de PostgreSQL del repositorio de cartera. |
 | **Hilton Alexander López Ic** | API REST con Express (E1): rutas de los siete casos de uso, perfiles asesor y gerencia verificados en el servidor, y los servicios de originación de créditos y cobro. |
 

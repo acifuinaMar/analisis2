@@ -1,25 +1,26 @@
 import type { RequestHandler } from "express";
 
+import { PERFILES, type Perfil } from "../acceso/perfil";
 import { ErrorHttp } from "./errores";
 
 /**
- * Perfiles de uso (alcance del E1: "basta con distinguir el perfil
- * asesor del perfil gerencia"; la autenticacion empresarial queda
- * fuera, seccion 3.1 del enunciado).
+ * Como la API hace cumplir los perfiles.
+ *
+ * La LISTA de perfiles no se define aqui: vive en src/acceso/perfil.ts,
+ * porque el chat gerencial del E5 necesita la misma y dos listas que
+ * deberian ser iguales acaban divergiendo. Aqui vive solo la parte que
+ * es propia de HTTP.
  *
  * El perfil viaja en el encabezado `X-Perfil` y se VERIFICA EN EL
  * SERVIDOR: ocultar un boton en la interfaz no es un control de acceso.
- * Es la expresion del menor privilegio en la capa HTTP:
- *
- *   asesor    origina creditos y registra pagos; no ve tablero ni cierres
- *   gerencia  consulta todo; no mueve dinero ni origina
+ * Es la expresion del menor privilegio en la capa HTTP.
  *
  * No es seguridad real (cualquiera puede mandar el encabezado): es la
- * separacion de responsabilidades que pide el alcance del proyecto.
+ * separacion de responsabilidades que pide el alcance del proyecto, y la
+ * autenticacion queda fuera por la seccion 3.1 del enunciado.
  */
-export const PERFILES = ["asesor", "gerencia"] as const;
 
-export type Perfil = typeof PERFILES[number];
+export { PERFILES, type Perfil } from "../acceso/perfil";
 
 export function exigirPerfil(...permitidos: Perfil[]): RequestHandler {
 

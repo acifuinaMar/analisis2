@@ -21,6 +21,8 @@
  * nucleo, el conjunto de evaluacion deja de cuadrar y la suite lo delata.
  */
 
+import type { Perfil } from "../acceso/perfil";
+
 export type CategoriaCaso =
     /** Consulta de gerencia: debe responder con una cifra del nucleo. */
     | "consulta"
@@ -63,6 +65,13 @@ export interface CasoAsistente {
 
     /** El caso debe detenerse a pedir aprobacion humana. */
     readonly requiereAprobacion?: boolean;
+
+    /**
+     * Perfil con el que se abre el chat. Por omision GERENCIA, que es
+     * quien hace las consultas del Anexo B; las operaciones del Anexo A
+     * son del asesor y lo declaran.
+     */
+    readonly perfil?: Perfil;
 
     /** Por que este caso esta en el conjunto. */
     readonly porQue: string;

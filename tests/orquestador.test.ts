@@ -9,7 +9,11 @@ import {
 } from "../src/adaptadores/repositorio-cartera-csv";
 import { crearServidorMcp } from "../src/mcp/servidor-mcp";
 import { HerramientasMcp } from "../src/asistente/herramientas-mcp";
-import { Orquestador } from "../src/asistente/orquestador";
+import { PERFILES, type Perfil } from "../src/acceso/perfil";
+import {
+    ErrorPerfilSinPermiso,
+    Orquestador
+} from "../src/asistente/orquestador";
 import type {
     ConsultaDocumental,
     TurnoModelo
@@ -45,7 +49,8 @@ const documentalFalso: ConsultaDocumental = {
 
 async function armar(
     guion: ReadonlyArray<TurnoModelo>,
-    conDocumental = true
+    conDocumental = true,
+    perfil: Perfil = "asesor"
 ): Promise<{ chat: Orquestador; modelo: ModeloGuionizado }> {
 
     const servidor = crearServidorMcp(
@@ -65,6 +70,7 @@ async function armar(
     const chat = new Orquestador(
         modelo,
         new HerramientasMcp(cliente),
+        perfil,
         conDocumental ? documentalFalso : undefined
     );
 
@@ -576,5 +582,166 @@ describe("Orquestador - errores y limites", () => {
 
         expect(r.texto).toContain("demasiadas veces");
         expect(r.herramientasUsadas.length).toBeLessThanOrEqual(6);
+    });
+});
+
+
+/**
+ * El perfil, que es el SEGUNDO control del pago.
+ *
+ * La aprobacion humana responde "dijo una persona que si a este monto?".
+ * El perfil responde "tiene esta persona permiso de mover dinero?". Son
+ * preguntas distintas y hacen falta las dos: sin la segunda, el chat
+ * seria la puerta de atras de los permisos de la API, porque lo que el
+ * perfil gerencia no puede hacer por REST lo lograria pidiendoselo al
+ * asistente.
+ */
+describe("Orquestador - el perfil que puede mover dinero", () => {
+
+    const PAGO = {
+        idCredito: "CV-2026-0043",
+        monto: 1114.54,
+        claveIdempotencia: "IDEM-PERFIL-1",
+        fechaOperacion: CORTE
+    };
+
+    const guion = () => [
+        llama("registrar_pago", PAGO),
+        dice("Listo.")
+    ];
+
+    it("Gerencia SI ve la vista previa con su desglose", async () => {
+
+        const { chat } = await armar(guion(), true, "gerencia");
+
+        const r = await chat.preguntar("Registra el pago de CV-2026-0043");
+
+        // Mirar no mueve nada, y revisar la prelacion antes de que el
+        // pago ocurra es justo lo que la gerencia necesita poder hacer.
+        expect(r.tipo).toBe("aprobacion_requerida");
+
+        const previa = ultimoResultado(chat);
+        expect(previa.aplicado).toBe(false);
+        expect(previa.desglosePrelacion).toBeDefined();
+    });
+
+    it("Gerencia NO puede aprobar: no se aplica nada", async () => {
+
+        const { chat } = await armar(guion(), true, "gerencia");
+
+        await chat.preguntar("Registra el pago de CV-2026-0043");
+
+        await expect(chat.aprobarPago())
+            .rejects.toThrow(ErrorPerfilSinPermiso);
+
+        const aplicado = chat.historial()
+            .filter((m) => m.papel === "resultado")
+            .map((m) => JSON.parse(
+                (m as { contenido: string }).contenido
+            ) as Record<string, unknown>)
+            .find((d) => d.aplicado === true);
+
+        expect(aplicado).toBeUndefined();
+    });
+
+    /**
+     * La negativa no destruye la propuesta. Nada se aplico y nada se
+     * perdio: el estado queda exactamente como estaba.
+     */
+    it("Tras la negativa la propuesta sigue pendiente", async () => {
+
+        const { chat } = await armar(guion(), true, "gerencia");
+
+        await chat.preguntar("Registra el pago de CV-2026-0043");
+
+        await expect(chat.aprobarPago()).rejects.toThrow();
+
+        expect(chat.pagoPendiente()).toBeDefined();
+        expect(chat.pagoPendiente()!.idCredito).toBe("CV-2026-0043");
+    });
+
+    /**
+     * El control de acceso se evalua ANTES del estado que protege: si el
+     * orden fuera el otro, el mensaje de error delataria si habia un pago
+     * en curso.
+     */
+    it("El perfil se verifica antes de mirar si hay pendiente",
+        async () => {
+
+            const { chat } = await armar([dice("hola")], true, "gerencia");
+
+            // Sin propuesta alguna: aun asi falla por PERFIL, no por
+            // "no hay nada pendiente".
+            await expect(chat.aprobarPago())
+                .rejects.toThrow(ErrorPerfilSinPermiso);
+        });
+
+    it("Gerencia SI puede rechazar el pago", async () => {
+
+        const { chat } = await armar(guion(), true, "gerencia");
+
+        await chat.preguntar("Registra el pago de CV-2026-0043");
+
+        const r = await chat.rechazarPago();
+
+        expect(r.tipo).toBe("respuesta");
+        expect(chat.pagoPendiente()).toBeUndefined();
+    });
+
+    it("El asesor si aprueba, con el mismo guion", async () => {
+
+        const { chat } = await armar(guion(), true, "asesor");
+
+        await chat.preguntar("Registra el pago de CV-2026-0043");
+
+        await chat.aprobarPago();
+
+        const aplicado = chat.historial()
+            .filter((m) => m.papel === "resultado")
+            .map((m) => JSON.parse(
+                (m as { contenido: string }).contenido
+            ) as Record<string, unknown>)
+            .find((d) => d.aplicado === true);
+
+        expect(aplicado).toBeDefined();
+    });
+
+    it("La sesion declara su perfil y si puede aprobar", async () => {
+
+        const g = await armar([dice("hola")], true, "gerencia");
+        expect(g.chat.perfilDeLaSesion()).toBe("gerencia");
+        expect(g.chat.puedeAprobar()).toBe(false);
+
+        const a = await armar([dice("hola")], true, "asesor");
+        expect(a.chat.perfilDeLaSesion()).toBe("asesor");
+        expect(a.chat.puedeAprobar()).toBe(true);
+    });
+
+    /**
+     * El modelo tiene que saber con quien habla, o le ofreceria a la
+     * gerencia aplicar un pago que despues le va a ser negado.
+     */
+    it("El modelo recibe el perfil en sus instrucciones", async () => {
+
+        const g = await armar([dice("hola")], true, "gerencia");
+        await g.chat.preguntar("hola");
+        expect(g.modelo.llamadas[0].instrucciones).toContain("GERENCIA");
+
+        const a = await armar([dice("hola")], true, "asesor");
+        await a.chat.preguntar("hola");
+        expect(a.modelo.llamadas[0].instrucciones).toContain("ASESOR");
+    });
+
+    /**
+     * Que no haya dos listas de perfiles. Si alguien agrega un perfil en
+     * la API y no en el modulo compartido, el chat permitiria algo que la
+     * API prohibe; esta prueba lo delata antes de que pase.
+     */
+    it("La API usa la misma lista de perfiles que el chat", async () => {
+
+        const api = await import("../src/api/perfiles");
+
+        expect(api.PERFILES).toEqual(PERFILES);
+        expect(PERFILES).toEqual(["asesor", "gerencia"]);
     });
 });

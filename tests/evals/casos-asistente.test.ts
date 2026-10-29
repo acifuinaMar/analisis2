@@ -9,6 +9,7 @@ import {
 } from "../../src/adaptadores/repositorio-cartera-csv";
 import { crearServidorMcp } from "../../src/mcp/servidor-mcp";
 import { HerramientasMcp } from "../../src/asistente/herramientas-mcp";
+import type { Perfil } from "../../src/acceso/perfil";
 import { Orquestador } from "../../src/asistente/orquestador";
 import {
     CASOS_ASISTENTE,
@@ -367,11 +368,13 @@ describe("Busqueda de cifras", () => {
 describe("Corredor de la evaluacion", () => {
 
     async function chatCon(
-        guion: ReadonlyArray<ReturnType<typeof dice>>
+        guion: ReadonlyArray<ReturnType<typeof dice>>,
+        perfil: Perfil = "asesor"
     ): Promise<Orquestador> {
         return new Orquestador(
             new ModeloGuionizado(guion),
-            await herramientas()
+            await herramientas(),
+            perfil
         );
     }
 
