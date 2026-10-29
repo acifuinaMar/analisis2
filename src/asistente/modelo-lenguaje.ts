@@ -38,6 +38,21 @@ export interface LlamadaHerramienta {
 
     readonly argumentos: Record<string, unknown>;
 
+    /**
+     * Dato OPACO del proveedor, atado a esta llamada.
+     *
+     * El orquestador no lo lee ni lo interpreta: solo lo guarda y lo
+     * devuelve tal cual en la ronda siguiente. Existe porque algunos
+     * proveedores firman la llamada que emitieron y exigen la firma de
+     * vuelta para continuar la conversacion; Gemini 3 lo hace, y sin
+     * ella rechaza la peticion y el chat se corta en la segunda
+     * herramienta.
+     *
+     * Es opaco a proposito: el puerto no se entera de que la firma
+     * significa, asi que no queda amarrado al formato de nadie.
+     */
+    readonly firmaProveedor?: string;
+
 }
 
 /**

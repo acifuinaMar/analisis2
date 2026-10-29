@@ -798,7 +798,7 @@ h += [
   npm test
 
   Test Files   44 passed (44)
-       Tests  639 passed (639)
+       Tests  649 passed (649)
         """
     ),
     tabla(
@@ -813,12 +813,12 @@ h += [
             ["Persistencia y adaptadores (E2)", "61",
              "Conteos, idempotencia, huella SHA-256 y paridad entre los "
              "dos adaptadores"],
-            ["Modulo RAG (E4)", "61",
+            ["Modulo RAG (E4)", "66",
              "Fragmentacion, citacion, validacion y reglas de seguridad"],
             ["API REST (E1)", "43",
              "Rutas, perfiles verificados en el servidor, validacion de "
              "entrada y originacion de creditos"],
-            ["Chat y evaluacion (E5 y E6)", "76",
+            ["Chat y evaluacion (E5 y E6)", "81",
              "Orquestacion, memoria de la sesion, la barrera de "
              "aprobacion, el perfil que puede aplicar el pago y los "
              "catorce casos de evaluacion"],
@@ -1019,7 +1019,7 @@ h += [
              "Orquestador terminado y probado; falta la pantalla, que es "
              "del E1"],
             ["E6 - Pruebas",
-             "Terminado: 639 pruebas, incluida la evaluacion del "
+             "Terminado: 649 pruebas, incluida la evaluacion del "
              "asistente"],
             ["E7 - Repositorio, documentacion y video",
              "README y este documento al dia; falta el video"],

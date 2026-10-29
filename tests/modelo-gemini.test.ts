@@ -259,3 +259,110 @@ describe("Adaptador Gemini - construccion", () => {
         expect(m.nombre).toBe("gemini-3.8-flash");
     });
 });
+
+
+/**
+ * La firma de la llamada (thoughtSignature).
+ *
+ * Gemini 3 firma cada llamada a herramienta que emite y exige la firma
+ * de vuelta en la ronda siguiente. El adaptador la leia del atajo
+ * `functionCalls` del SDK, que entrega el nombre y los argumentos pero
+ * pierde la firma, asi que la conversacion se cortaba con 400
+ * INVALID_ARGUMENT justo cuando el asistente iba por su segunda
+ * herramienta. Lo delataron los casos OP-5 y OP-6, que son los que
+ * necesitan dos rondas.
+ */
+describe("Adaptador Gemini - la firma de la llamada", () => {
+
+    it("La toma de las partes del candidato", () => {
+
+        const turno = aTurno({
+            candidates: [{
+                content: {
+                    parts: [{
+                        functionCall: {
+                            name: "consultar_credito",
+                            args: { idCredito: "CV-2026-0043" }
+                        },
+                        thoughtSignature: "FIRMA-ABC123"
+                    }]
+                }
+            }]
+        });
+
+        expect(turno.tipo).toBe("llamadas");
+
+        if (turno.tipo !== "llamadas") throw new Error("tipo inesperado");
+
+        expect(turno.llamadas[0].nombre).toBe("consultar_credito");
+        expect(turno.llamadas[0].firmaProveedor).toBe("FIRMA-ABC123");
+    });
+
+    it("La devuelve tal cual en el historial", () => {
+
+        const historial: Mensaje[] = [{
+            papel: "asistente_llama",
+            llamadas: [{
+                nombre: "consultar_credito",
+                argumentos: { idCredito: "CV-2026-0043" },
+                firmaProveedor: "FIRMA-ABC123"
+            }]
+        }];
+
+        const partes = aContenidos(historial)[0].parts ?? [];
+
+        expect(partes[0].thoughtSignature).toBe("FIRMA-ABC123");
+        expect(partes[0].functionCall?.name).toBe("consultar_credito");
+    });
+
+    /**
+     * El viaje completo: lo que el modelo devolvio tiene que poder
+     * volver a entrar sin perder nada. Es el camino que fallaba.
+     */
+    it("Sobrevive la ida y la vuelta", () => {
+
+        const turno = aTurno({
+            candidates: [{
+                content: {
+                    parts: [{
+                        functionCall: { name: "explicar_mora", args: {} },
+                        thoughtSignature: "FIRMA-XYZ789"
+                    }]
+                }
+            }]
+        });
+
+        if (turno.tipo !== "llamadas") throw new Error("tipo inesperado");
+
+        const partes = aContenidos([{
+            papel: "asistente_llama",
+            llamadas: turno.llamadas
+        }])[0].parts ?? [];
+
+        expect(partes[0].thoughtSignature).toBe("FIRMA-XYZ789");
+    });
+
+    /** Sin firma no se inventa el campo: iria vacio a la peticion. */
+    it("Sin firma, la parte no lleva el campo", () => {
+
+        const partes = aContenidos([{
+            papel: "asistente_llama",
+            llamadas: [{ nombre: "consultar_cartera", argumentos: {} }]
+        }])[0].parts ?? [];
+
+        expect("thoughtSignature" in partes[0]).toBe(false);
+    });
+
+    /** El atajo sigue sirviendo para respuestas sin partes. */
+    it("Si no hay partes, cae al atajo del SDK", () => {
+
+        const turno = aTurno({
+            functionCalls: [{ name: "consultar_cartera", args: {} }]
+        });
+
+        if (turno.tipo !== "llamadas") throw new Error("tipo inesperado");
+
+        expect(turno.llamadas[0].nombre).toBe("consultar_cartera");
+        expect(turno.llamadas[0].firmaProveedor).toBeUndefined();
+    });
+});

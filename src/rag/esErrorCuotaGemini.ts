@@ -1,23 +1,18 @@
+import { detalleErrorGemini } from "./detalleErrorGemini";
 
+/**
+ * Si el error es por cuota agotada (429 / RESOURCE_EXHAUSTED).
+ *
+ * El codigo puede venir en el primer nivel, anidado bajo `error`, o solo
+ * dentro del JSON del mensaje; detalleErrorGemini mira las tres formas,
+ * porque mirar solo la primera dejaba el reintento sin dispararse.
+ */
 export function esErrorCuotaGemini(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    return false;
-  }
 
-  const detalle = error as {
-    code?: number | string;
-    status?: number | string;
-    message?: string;
-  };
-
-  // El SDK puede devolver el código HTTP como número
-  // o el estado textual RESOURCE_EXHAUSTED.
-  const codigo = Number(detalle.code);
-  const estado = String(detalle.status ?? "").toUpperCase();
+  const { codigos, estados } = detalleErrorGemini(error);
 
   return (
-    codigo === 429 ||
-    Number(detalle.status) === 429 ||
-    estado === "RESOURCE_EXHAUSTED"
+    codigos.includes(429) ||
+    estados.includes("RESOURCE_EXHAUSTED")
   );
 }

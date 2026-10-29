@@ -7,6 +7,11 @@ import type {
     ModeloLenguaje,
     TurnoModelo
 } from "../asistente/modelo-lenguaje";
+import { esErrorCuotaGemini } from "../rag/esErrorCuotaGemini";
+import {
+    esErrorTemporalGemini,
+    reintentarGemini
+} from "../rag/reintentarGemini";
 
 /**
  * ADAPTADOR del puerto ModeloLenguaje sobre Google Gemini.
@@ -67,7 +72,15 @@ export function aContenidos(
                     functionCall: {
                         name: llamada.nombre,
                         args: llamada.argumentos
-                    }
+                    },
+                    // La firma se devuelve TAL CUAL, sin mirarla. Gemini 3
+                    // firma cada llamada que emite y la exige de vuelta en
+                    // la ronda siguiente: sin ella responde 400
+                    // INVALID_ARGUMENT y la conversacion se corta justo
+                    // cuando el asistente iba por su segunda herramienta.
+                    ...(llamada.firmaProveedor === undefined
+                        ? {}
+                        : { thoughtSignature: llamada.firmaProveedor })
                 }))
             });
             continue;
@@ -141,18 +154,48 @@ function sinMetadatos(
     return copia;
 }
 
-/** Lee el turno que devolvio Gemini en el vocabulario del puerto. */
+/**
+ * Lee el turno que devolvio Gemini en el vocabulario del puerto.
+ *
+ * Se leen las PARTES del candidato y no el atajo `functionCalls` del
+ * SDK, porque ese atajo entrega el nombre y los argumentos pero pierde
+ * la firma, y la firma hay que devolverla. El atajo queda como respaldo
+ * para las respuestas que no traen partes.
+ */
 export function aTurno(respuesta: {
+    candidates?: Array<{
+        content?: {
+            parts?: Array<{
+                functionCall?: { name?: string; args?: unknown };
+                thoughtSignature?: string;
+            }>;
+        };
+    }>;
     functionCalls?: Array<{ name?: string; args?: unknown }>;
     text?: string;
 }): TurnoModelo {
 
-    const llamadas = (respuesta.functionCalls ?? [])
+    const partes = respuesta.candidates?.[0]?.content?.parts ?? [];
+
+    const deLasPartes = partes
+        .filter((parte) => typeof parte.functionCall?.name === "string")
+        .map((parte) => ({
+            nombre: parte.functionCall?.name as string,
+            argumentos: (parte.functionCall?.args
+                ?? {}) as Record<string, unknown>,
+            ...(parte.thoughtSignature === undefined
+                ? {}
+                : { firmaProveedor: parte.thoughtSignature })
+        }));
+
+    const delAtajo = (respuesta.functionCalls ?? [])
         .filter((llamada) => typeof llamada.name === "string")
         .map((llamada) => ({
             nombre: llamada.name as string,
             argumentos: (llamada.args ?? {}) as Record<string, unknown>
         }));
+
+    const llamadas = deLasPartes.length > 0 ? deLasPartes : delAtajo;
 
     if (llamadas.length > 0) {
         return { tipo: "llamadas", llamadas };
@@ -189,15 +232,30 @@ export class ModeloGemini implements ModeloLenguaje {
         herramientas: ReadonlyArray<DeclaracionHerramienta>
     ): Promise<TurnoModelo> {
 
-        const respuesta = await this.cliente.models.generateContent({
-            model: this.modelo,
-            contents: aContenidos(historial),
-            config: {
-                systemInstruction: instruccionesSistema,
-                temperature: TEMPERATURA,
-                tools: [{ functionDeclarations: aDeclaraciones(herramientas) }]
+        // El modelo compartido se sobrecarga (503 UNAVAILABLE) y la
+        // cuota gratuita se agota por minuto (429). Las dos cosas son
+        // transitorias y pasajeras, asi que se reintentan con espera
+        // creciente en vez de contarse como una falla del asistente.
+        const respuesta = await reintentarGemini(
+            () => this.cliente.models.generateContent({
+                model: this.modelo,
+                contents: aContenidos(historial),
+                config: {
+                    systemInstruction: instruccionesSistema,
+                    temperature: TEMPERATURA,
+                    tools: [{
+                        functionDeclarations: aDeclaraciones(herramientas)
+                    }]
+                }
+            }),
+            {
+                maxIntentos: 5,
+                esperaInicialMs: 2000,
+                esReintentable: (error) =>
+                    esErrorTemporalGemini(error)
+                    || esErrorCuotaGemini(error)
             }
-        });
+        );
 
         return aTurno(respuesta);
     }

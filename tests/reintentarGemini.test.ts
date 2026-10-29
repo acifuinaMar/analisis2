@@ -1,4 +1,7 @@
 
+import {
+  esErrorTemporalGemini as _esErrorTemporalGemini
+} from "../src/rag/reintentarGemini";
 import { describe, expect, it, vi } from "vitest";
 import {
   esErrorTemporalGemini,
@@ -104,5 +107,62 @@ describe("RAG - Reintentos de Gemini", () => {
     };
 
     expect(esErrorTemporalGemini(error)).toBe(true);
+  });
+});
+
+
+/**
+ * Las tres formas en que llega el mismo error.
+ *
+ * El predicado miraba solo el primer nivel, y el 503 real llega anidado
+ * bajo `error` o unicamente dentro del JSON de `message`. Devolvia
+ * false, el reintento no se disparaba, y una sobrecarga pasajera del
+ * modelo se contaba como falla del asistente: las catorce evaluaciones
+ * fallaron asi.
+ */
+describe("Formas del error de Gemini", () => {
+
+  it("Reconoce el 503 en el primer nivel", () => {
+    expect(_esErrorTemporalGemini({ code: 503 })).toBe(true);
+  });
+
+  it("Reconoce el 503 anidado bajo error", () => {
+    expect(
+      _esErrorTemporalGemini({
+        error: { code: 503, status: "UNAVAILABLE" }
+      })
+    ).toBe(true);
+  });
+
+  /** La forma que de verdad devolvio el SDK en la corrida fallida. */
+  it("Reconoce el 503 dentro del JSON del mensaje", () => {
+    expect(
+      _esErrorTemporalGemini({
+        message: JSON.stringify({
+          error: {
+            code: 503,
+            message: "This model is currently experiencing high demand.",
+            status: "UNAVAILABLE"
+          }
+        })
+      })
+    ).toBe(true);
+  });
+
+  it("No reintenta un 400, que no se arregla esperando", () => {
+    expect(
+      _esErrorTemporalGemini({
+        message: JSON.stringify({
+          error: { code: 400, status: "INVALID_ARGUMENT" }
+        })
+      })
+    ).toBe(false);
+  });
+
+  it("Un mensaje que no es JSON no lo rompe", () => {
+    expect(_esErrorTemporalGemini({ message: "algo salio mal" }))
+      .toBe(false);
+    expect(_esErrorTemporalGemini(null)).toBe(false);
+    expect(_esErrorTemporalGemini("texto")).toBe(false);
   });
 });

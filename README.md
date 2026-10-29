@@ -8,7 +8,7 @@
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
 ![Node](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-639%20pruebas-6E9F18)
+![Vitest](https://img.shields.io/badge/Vitest-649%20pruebas-6E9F18)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-9%20herramientas-D97757)
 ![Express](https://img.shields.io/badge/Express-API%20REST-000000?logo=express&logoColor=white)
@@ -48,7 +48,7 @@ Entregables del **Proyecto Final**.
 | **E3** | Servidor MCP sobre los puertos del Proyecto 1 | Terminado |
 | **E4** | RAG con citación de fuentes | Terminado |
 | **E5** | Chat gerencial integrado a la interfaz | Orquestador terminado y probado; falta la pantalla, que es del E1 |
-| **E6** | Pruebas | Terminado: 639 pruebas, incluida la evaluación del asistente |
+| **E6** | Pruebas | Terminado: 649 pruebas, incluida la evaluación del asistente |
 | **E7** | Repositorio, documentación y video | README y documento técnico al día; falta el video |
 
 ---
@@ -518,7 +518,7 @@ repositorio.
 npm test
 ```
 
-**639 pruebas en 44 archivos**, sin red y sin base de datos. La suite del
+**649 pruebas en 44 archivos**, sin red y sin base de datos. La suite del
 Proyecto 1 y del Proyecto 2 sigue pasando intacta: es la prueba de que el
 núcleo no se rompió.
 
