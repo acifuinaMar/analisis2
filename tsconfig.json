@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "CommonJS",
 
-    "rootDir": "./src",
+    // La raiz es el proyecto y no src/ porque tests/ tambien se
+    // type-chequea: con rootDir en src/, tsc rechaza todo lo de fuera.
+    "rootDir": ".",
     "outDir": "./dist",
 
     "strict": true,
@@ -14,8 +16,13 @@
     "skipLibCheck": true
   },
 
+  // tests/ entra a proposito. Las pruebas usan las mismas firmas que
+  // el codigo, y si no se type-chequean un argumento equivocado pasa
+  // en silencio: paso al agregar el perfil al orquestador, y lo
+  // atraparon las pruebas en vez del compilador.
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "tests/**/*"
   ],
 
   "exclude": [

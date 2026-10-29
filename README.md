@@ -570,6 +570,7 @@ estaba dentro de «1300».
 |---|---|
 | `npm test` | Toda la suite de pruebas |
 | `npm run cargar` | Carga el paquete canónico en la base (`-- --reiniciar` borra antes) |
+| `npm run tipos` | Chequeo de tipos de `src/` **y** `tests/` |
 | `npm run api` | Levanta la API REST en el puerto 3000 |
 | `npm run mcp:servidor` | Levanta el servidor MCP por STDIO (`-- --csv` sin base) |
 | `npm run chat` | Chat gerencial por consola (`-- --perfil asesor` para registrar pagos) |

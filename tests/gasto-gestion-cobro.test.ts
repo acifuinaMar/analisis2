@@ -61,7 +61,9 @@ describe("Gasto de gestion de cobro - reglas (CP-02, 7.5)", () => {
         const libro = new GastoGestionCobro();
 
         for (const dias of [1, 15, 30]) {
-            expect(libro.evaluarAlCorte("C-1", dias).esCero()).toBe(true);
+            expect(
+                libro.evaluarAlCorte("C-1", dias, ESCALONADA).esCero()
+            ).toBe(true);
         }
 
         expect(libro.pendientePara("C-1").esCero()).toBe(true);

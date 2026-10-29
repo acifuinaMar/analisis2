@@ -160,9 +160,37 @@ describe("Abierto/cerrado: agregar una politica no toca el motor", () => {
         // Se define aqui mismo, fuera del nucleo. Si el motor tuviera la
         // formula adentro, esto seria imposible sin modificarlo.
         const politicaDeGracia: PoliticaMora = {
+
             version: "POL-GRACIA-PRUEBA",
+
             calcular: (capital, dias) =>
-                dias <= 5 ? Dinero.cero() : capital.multiplicar(0.01)
+                dias <= 5 ? Dinero.cero() : capital.multiplicar(0.01),
+
+            // Parte del contrato, no un adorno: solo la politica sabe
+            // como calculo, asi que solo ella puede explicarlo.
+            explicar: (capital, dias) => {
+
+                const monto = dias <= 5
+                    ? 0
+                    : capital.obtenerValor() * 0.01;
+
+                return {
+                    versionPolitica: "POL-GRACIA-PRUEBA",
+                    capitalEnMora: capital,
+                    diasAtraso: dias,
+                    lineas: [{
+                        tramo: dias <= 5 ? "gracia" : "plana",
+                        diasEnTramo: dias,
+                        tnaMoratoria: 0,
+                        tasaDiaria: 0,
+                        montoSinRedondear: monto
+                    }],
+                    sumaSinRedondear: monto,
+                    total: dias <= 5
+                        ? Dinero.cero()
+                        : capital.multiplicar(0.01)
+                };
+            }
         };
 
         const calculadora = new CalculadoraMora(politicaDeGracia);
