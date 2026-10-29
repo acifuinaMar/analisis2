@@ -7,7 +7,8 @@ import type {
     ModeloLenguaje,
     TurnoModelo
 } from "../asistente/modelo-lenguaje";
-import { esErrorCuotaGemini } from "../rag/esErrorCuotaGemini";
+import { esErrorCuotaPasajera } from "../rag/esErrorCuotaGemini";
+import { MODELO_GENERATIVO } from "../rag/modeloGenerativo";
 import {
     esErrorTemporalGemini,
     reintentarGemini
@@ -25,7 +26,13 @@ import {
  * dos proveedores por un sistema.
  */
 
-export const MODELO_POR_OMISION = "gemini-3.8-flash";
+/**
+ * El mismo modelo que usa el modulo documental, desde un solo lugar y
+ * cambiable con GEMINI_MODELO. Vease src/rag/modeloGenerativo.ts: la
+ * cuota gratuita es por modelo y por dia, asi que poder cambiarlo sin
+ * recompilar no es comodidad, es lo que permite correr la evaluacion.
+ */
+export const MODELO_POR_OMISION = MODELO_GENERATIVO;
 
 /**
  * Temperatura baja a proposito. Aqui no se busca variedad: se busca que
@@ -253,7 +260,7 @@ export class ModeloGemini implements ModeloLenguaje {
                 esperaInicialMs: 2000,
                 esReintentable: (error) =>
                     esErrorTemporalGemini(error)
-                    || esErrorCuotaGemini(error)
+                    || esErrorCuotaPasajera(error)
             }
         );
 

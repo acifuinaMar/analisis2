@@ -177,6 +177,13 @@ npm run evals:asistente                 # la evaluación de los 14 casos
 
 Ambos necesitan `GEMINI_API_KEY`.
 
+> **La cuota gratuita de Gemini es por modelo y por día.** `gemini-3.8-flash`
+> permite 20 peticiones diarias y los 14 casos gastan unas 40, así que el
+> modelo se elige con `GEMINI_MODELO` en el `.env` y por omisión es
+> `gemini-3.5-flash-lite`, que tiene cupo más amplio. El modelo no calcula
+> ninguna cifra —solo elige la herramienta y redacta—, así que un modelo
+> pequeño alcanza: las cifras las pone el núcleo.
+
 Sin la bandera el chat abre como **gerencia**, que es el perfil que menos
 puede. Equivocarse por olvido cae del lado que no mueve dinero.
 

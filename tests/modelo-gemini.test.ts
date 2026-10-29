@@ -7,6 +7,7 @@ import {
     aDeclaraciones,
     aTurno
 } from "../src/adaptadores/modelo-gemini";
+import { MODELO_GENERATIVO } from "../src/rag/modeloGenerativo";
 import type { Mensaje } from "../src/asistente/modelo-lenguaje";
 
 /**
@@ -248,8 +249,22 @@ describe("Adaptador Gemini - construccion", () => {
             .toThrow(/GEMINI_API_KEY/);
     });
 
+    /**
+     * Se compara contra la constante compartida y no contra un nombre
+     * escrito aqui. Fijar el nombre a mano convertia esta prueba en lo
+     * contrario de lo que queria decir: afirma que el chat y el modulo
+     * documental usan el MISMO modelo, no que ese modelo se llame de
+     * cierta forma, y el nombre tiene que poder cambiarse desde el .env
+     * porque la cuota gratuita es por modelo y por dia.
+     */
     it("Usa el mismo modelo que el modulo RAG", () => {
-        expect(MODELO_POR_OMISION).toBe("gemini-3.8-flash");
+        expect(MODELO_POR_OMISION).toBe(MODELO_GENERATIVO);
+    });
+
+    it("GEMINI_MODELO manda sobre el valor por omision", () => {
+        // El valor por omision es un lite, no el modelo de 20 al dia.
+        expect(MODELO_GENERATIVO).toMatch(/^gemini-/);
+        expect(MODELO_GENERATIVO).not.toBe("gemini-3.8-flash");
     });
 
     it("Con clave se construye y se identifica", () => {
