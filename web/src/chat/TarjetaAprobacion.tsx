@@ -41,6 +41,10 @@ interface PropsTarjetaAprobacion {
     readonly alAprobar?: () => void;
     readonly alRechazar?: () => void;
     readonly enviando?: boolean;
+    /** Texto del botón que aplica (chat: "Aprobar y aplicar"). */
+    readonly textoAprobar?: string;
+    /** Texto del botón que descarta la propuesta. */
+    readonly textoRechazar?: string;
 }
 
 /**
@@ -50,7 +54,15 @@ interface PropsTarjetaAprobacion {
  * "Aprobar y aplicar" y "Rechazar"; la gerencia ve el mismo desglose, pero
  * sin botón de aplicar: solo puede descartar la propuesta.
  */
-export function TarjetaAprobacion({ vista, puedeAprobar, alAprobar, alRechazar, enviando }: PropsTarjetaAprobacion) {
+export function TarjetaAprobacion({
+    vista,
+    puedeAprobar,
+    alAprobar,
+    alRechazar,
+    enviando,
+    textoAprobar = "Aprobar y aplicar",
+    textoRechazar = "Rechazar"
+}: PropsTarjetaAprobacion) {
     const d = vista.desglosePrelacion;
 
     return (
@@ -69,7 +81,7 @@ export function TarjetaAprobacion({ vista, puedeAprobar, alAprobar, alRechazar, 
                         { etiqueta: "Crédito", valor: vista.idCredito },
                         { etiqueta: "Cliente", valor: vista.nombreCliente },
                         { etiqueta: "Fecha de operación", valor: formatoFecha(vista.fechaOperacion) },
-                        { etiqueta: "Cuotas que cubre", valor: vista.cuotasCubiertas.join(", ") || "—" },
+                        { etiqueta: "Cuota que cubre", valor: vista.cuotasCubiertas.join(", ") || "—" },
                         { etiqueta: "Estado actual", valor: <ChipEstado estado={vista.estadoAntes.estado} /> }
                     ]}
                 />
@@ -90,10 +102,10 @@ export function TarjetaAprobacion({ vista, puedeAprobar, alAprobar, alRechazar, 
                 {puedeAprobar ? (
                     <div className="flex flex-col gap-2 sm:flex-row">
                         <Boton icono="check" bloque onClick={alAprobar} cargando={enviando}>
-                            Aprobar y aplicar
+                            {textoAprobar}
                         </Boton>
                         <Boton variante="secundario" bloque onClick={alRechazar} disabled={enviando}>
-                            Rechazar
+                            {textoRechazar}
                         </Boton>
                     </div>
                 ) : (

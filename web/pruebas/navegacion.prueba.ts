@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { CREDITO_MORA, simularApi } from "./apiSimulada";
+
 /**
  * Pruebas de la Fase 1 en un navegador real: rutas, perfiles, layouts,
  * fecha de corte y panel del asistente.
@@ -10,13 +12,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function interceptarApi(page: Page, saludOk = true): Promise<string[]> {
     const pedidas: string[] = [];
-    await page.route("**/api/**", async ruta => {
+    // Solo las rutas cuyo pathname empieza con /api/. El patrón "**/api/**"
+    // también atrapaba /src/api/cliente.ts, que Vite sirve como módulo.
+    await page.route(url => url.pathname.startsWith("/api/"), async ruta => {
         const url = new URL(ruta.request().url());
-
-        if (url.pathname.startsWith("/src/")) {
-            await ruta.continue();
-            return;
-        }
         pedidas.push(`${ruta.request().method()} ${url.pathname}`);
         if (url.pathname === "/api/salud" && saludOk) {
             await ruta.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ estado: "ok" }) });
@@ -51,7 +50,7 @@ test.describe("Selección de perfil", () => {
     });
 
     test("si la API no responde, lo dice con la instrucción para levantarla", async ({ page }) => {
-        await page.unroute("**/api/**");
+        await page.unrouteAll();
         await interceptarApi(page, false);
         await page.goto("/perfil");
         await expect(page.getByText(/La API no responde/)).toBeVisible();
@@ -93,17 +92,20 @@ test.describe("Perfil asesor (teléfono)", () => {
     });
 
     test("el detalle del crédito enciende «Clientes» y su botón atrás funciona", async ({ page }) => {
+        // Desde la Fase 2 el detalle muestra datos reales: se usa la API simulada.
+        await page.unrouteAll();
+        await simularApi(page);
         await entrarComo(page, "Asesor de campo");
-        await page.goto("/asesor/creditos/CV-2026-0030");
+        await page.goto(`/asesor/creditos/${CREDITO_MORA}`);
         await expect(page.getByRole("heading", { name: "Detalle del crédito", level: 1 })).toBeVisible();
         await expect(page.getByRole("navigation", { name: "Menú principal" }).getByRole("link", { name: "Clientes" }))
             .toHaveAttribute("aria-current", "page");
 
         await page.getByRole("link", { name: "Detalle de la mora" }).click();
-        await expect(page).toHaveURL(/\/asesor\/creditos\/CV-2026-0030\/mora$/);
+        await expect(page).toHaveURL(new RegExp(`/asesor/creditos/${CREDITO_MORA}/mora$`));
 
-        await page.getByRole("link", { name: "Volver" }).click();
-        await expect(page).toHaveURL(/\/asesor\/creditos\/CV-2026-0030$/);
+        await page.getByRole("link", { name: "Volver", exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`/asesor/creditos/${CREDITO_MORA}$`));
     });
 
     test("las acciones del inicio llevan a las pantallas obligatorias", async ({ page }) => {

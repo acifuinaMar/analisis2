@@ -43,7 +43,7 @@ Entregables del **Proyecto Final**.
 
 | Entregable | Descripción | Estado |
 |---|---|---|
-| **E1** | Interfaz de usuario implementada (7 pantallas, 3 flujos) | API REST terminada; falta el frontend en React |
+| **E1** | Interfaz de usuario implementada (7 pantallas, 3 flujos) | API REST terminada; frontend React en curso: base y cobro en campo listos (ver [`web/README.md`](web/README.md)) |
 | **E2** | Persistencia y carga canónica | Terminado |
 | **E3** | Servidor MCP sobre los puertos del Proyecto 1 | Terminado |
 | **E4** | RAG con citación de fuentes | Terminado |
@@ -162,6 +162,16 @@ en su sección 3.1— sino la separación de responsabilidades que sí pide:
 ```bash
 curl -H "X-Perfil: gerencia" \
   "http://127.0.0.1:3000/api/cartera?fechaCorte=2026-10-31"
+```
+
+Para el cobro en campo, el asesor busca clientes por nombre (sin importar
+tildes), identificador de cliente, DPI o identificador de crédito. Es de solo
+lectura, devuelve como máximo 20 coincidencias y del DPI solo los cuatro
+últimos caracteres; nunca el teléfono:
+
+```bash
+curl -H "X-Perfil: asesor" \
+  "http://127.0.0.1:3000/api/clientes?buscar=CV-2026-0043"
 ```
 
 Detalle en [`docs/api/Readme Sección API.md`](docs/api/Readme%20Secci%C3%B3n%20API.md).

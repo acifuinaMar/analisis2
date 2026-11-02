@@ -4,14 +4,9 @@ import type { Perfil } from "../api/cliente";
 import { Componentes } from "../paginas/Componentes";
 import { InicioAsesor } from "../paginas/asesor/InicioAsesor";
 import { MasAsesor } from "../paginas/asesor/MasAsesor";
-import {
-    BuscarCliente,
-    DetalleCredito,
-    DetalleMora,
-    PlanAmortizacion,
-    RegistroPago,
-    SolicitudCredito
-} from "../paginas/asesor/PantallasAsesor";
+import { BuscarCliente, DetalleCredito, DetalleMora } from "../paginas/asesor/CobroEnCampo";
+import { PlanAmortizacion, SolicitudCredito } from "../paginas/asesor/PantallasAsesor";
+import { RegistroPago } from "../paginas/asesor/RegistroPago";
 import {
     CarteraEnMora,
     Cierre,

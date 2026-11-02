@@ -55,7 +55,7 @@ export function InicioAsesor() {
             <PantallaPendiente
                 titulo="Próximos vencimientos"
                 subtitulo="Cuotas que vencen en los próximos días, para planificar las visitas."
-                fase="Fase 2 · Cobro en campo"
+                fase="Fase posterior"
                 referencia="capacidad «Ver próximos vencimientos» (G-6)"
                 endpoints={["GET /api/vencimientos?fechaCorte=&ventanaDias=7"]}
                 silueta="tabla"
