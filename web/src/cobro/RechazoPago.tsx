@@ -1,6 +1,7 @@
 import { ErrorApi } from "../api/cliente";
 import type { DetalleMontoNoExacto } from "../api/contratos";
 import { Aviso, AvisoError, Boton, Desglose } from "../ui";
+import { rotuloCuotas } from "../utilidades/etiquetas";
 import { formatoQuetzales } from "../utilidades/formato";
 
 /**
@@ -16,7 +17,7 @@ export function RechazoPago({ error, alUsarMonto }: { error: ErrorApi; alUsarMon
             <div className="space-y-3">
                 <Aviso tipo="peligro" titulo="Monto no exacto">{error.message}</Aviso>
                 <Desglose
-                    titulo={`Monto correcto (cuota N.º ${d.cuotasCubiertas.join(", ")})`}
+                    titulo={`Monto correcto (${rotuloCuotas(d.cuotasCubiertas, false)})`}
                     lineas={[
                         { concepto: "Gastos de gestión", monto: formatoQuetzales(d.desglosePrelacion.gastos) },
                         { concepto: "Interés moratorio", monto: formatoQuetzales(d.desglosePrelacion.interesMoratorio) },

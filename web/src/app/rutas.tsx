@@ -5,7 +5,9 @@ import { Componentes } from "../paginas/Componentes";
 import { InicioAsesor } from "../paginas/asesor/InicioAsesor";
 import { MasAsesor } from "../paginas/asesor/MasAsesor";
 import { BuscarCliente, DetalleCredito, DetalleMora } from "../paginas/asesor/CobroEnCampo";
-import { PlanAmortizacion, SolicitudCredito } from "../paginas/asesor/PantallasAsesor";
+import { PlanAmortizacion } from "../paginas/asesor/PlanAmortizacion";
+import { SolicitudCredito } from "../paginas/asesor/SolicitudCredito";
+import { Vencimientos } from "../paginas/asesor/Vencimientos";
 import { RegistroPago } from "../paginas/asesor/RegistroPago";
 import {
     CarteraEnMora,
@@ -85,6 +87,13 @@ const RUTAS_BASE: ReadonlyArray<DefinicionRuta> = [
         titulo: "Nueva solicitud",
         perfil: "asesor", layout: "asesor",
         pagina: () => <SolicitudCredito />,
+        atras: () => "/asesor"
+    },
+    {
+        patron: "/asesor/vencimientos",
+        titulo: "Próximos vencimientos",
+        perfil: "asesor", layout: "asesor",
+        pagina: () => <Vencimientos />,
         atras: () => "/asesor"
     },
     { patron: "/asesor/mas", titulo: "Más", perfil: "asesor", layout: "asesor", pagina: () => <MasAsesor /> },

@@ -6,6 +6,7 @@ import type {
     EstadoCredito,
     ExplicacionMora,
     PlanDeCredito,
+    ProximosVencimientos,
     ResultadoBusquedaClientes,
     ResultadoPago
 } from "./contratos";
@@ -49,4 +50,9 @@ export function obtenerMora(api: ClienteApi, idCredito: string, numero: number, 
  */
 export function registrarPago(api: ClienteApi, idCredito: string, cuerpo: CuerpoRegistrarPago, senal?: AbortSignal) {
     return api.post<ResultadoPago>(`/creditos/${id(idCredito)}/pagos`, cuerpo, senal);
+}
+
+/** GET /api/vencimientos: cuotas que vencen en (corte, corte + ventanaDias]. */
+export function obtenerVencimientos(api: ClienteApi, fechaCorte: string, ventanaDias: number, senal?: AbortSignal) {
+    return api.get<ProximosVencimientos>("/vencimientos", { fechaCorte, ventanaDias }, senal);
 }

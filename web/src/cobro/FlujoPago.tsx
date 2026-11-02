@@ -23,7 +23,7 @@ import {
     Tabla,
     Tarjeta
 } from "../ui";
-import { CANALES_PAGO, etiquetaTramo } from "../utilidades/etiquetas";
+import { CANALES_PAGO, etiquetaCuotasQueCubre, etiquetaTramo, rotuloCuotas } from "../utilidades/etiquetas";
 import { formatoFecha, formatoQuetzales } from "../utilidades/formato";
 import {
     borrarPendiente,
@@ -370,7 +370,7 @@ export function FlujoPago({ idCredito, pendienteInicial }: PropsFlujoPago) {
                         <Tarjeta className="space-y-4 p-4">
                             <EncabezadoTarjeta
                                 titulo="Datos del pago"
-                                subtitulo={`Deuda exigible calculada por el servidor: ${formatoQuetzales(d.montoExacto)} (cuota N.º ${d.cuotasExigibles.join(", ")}).`}
+                                subtitulo={`Deuda exigible calculada por el servidor: ${formatoQuetzales(d.montoExacto)} (${rotuloCuotas(d.cuotasExigibles, false)}).`}
                             />
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <CampoTexto
@@ -500,7 +500,7 @@ function Comprobante({ op, aplicado, ultima, intentos, enviando, alReintentar, a
                         { etiqueta: "Fecha de operación", valor: formatoFecha(base.fechaOperacion) },
                         { etiqueta: "Monto recibido", valor: formatoQuetzales(base.montoRecibido), enfasis: true },
                         { etiqueta: "Medio de pago", valor: ETIQUETA_CANAL[op.datos.canal] },
-                        { etiqueta: "Cuota que cubre", valor: base.cuotasCubiertas.join(", ") || "—" },
+                        { etiqueta: etiquetaCuotasQueCubre(base.cuotasCubiertas.length), valor: base.cuotasCubiertas.join(", ") || "—" },
                         { etiqueta: "Clave de idempotencia", valor: <span className="break-all font-mono text-xs">{op.clave}</span> },
                         { etiqueta: "Envíos con esta clave", valor: String(intentos) }
                     ]}

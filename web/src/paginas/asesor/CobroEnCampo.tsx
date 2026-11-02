@@ -143,7 +143,9 @@ export function DetalleCredito() {
                 {d && !hayDeuda ? <Aviso tipo="exito" titulo="Sin cuotas vencidas">No hay deuda exigible a esta fecha.</Aviso> : null}
                 {d && hayDeuda ? (
                     <Desglose
-                        titulo={`Cuota exigible: N.º ${d.cuotasExigibles.join(", ")}`}
+                        titulo={d.cuotasExigibles.length === 1
+                            ? `Cuota exigible: N.º ${d.cuotasExigibles[0]}`
+                            : `Cuotas exigibles: N.º ${d.cuotasExigibles.join(", ")}`}
                         lineas={[
                             { concepto: "Gastos de gestión", monto: formatoQuetzales(d.desglosePrelacion.gastos) },
                             { concepto: "Interés moratorio", monto: formatoQuetzales(d.desglosePrelacion.interesMoratorio) },

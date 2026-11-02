@@ -61,3 +61,18 @@ export const CANALES_PAGO = [
     { valor: "agencia", etiqueta: "Efectivo en agencia" },
     { valor: "transferencia", etiqueta: "Transferencia" }
 ] as const;
+
+/**
+ * "Cuota" o "Cuotas" según cuántas sean (decisión D5 del equipo).
+ * [3] -> "Cuota N.º 3"; [1, 2] -> "Cuotas N.º 1, 2".
+ */
+export function rotuloCuotas(numeros: ReadonlyArray<number>, mayuscula = true): string {
+    const palabra = numeros.length === 1 ? "cuota" : "cuotas";
+    const inicial = mayuscula ? palabra[0]!.toUpperCase() + palabra.slice(1) : palabra;
+    return numeros.length === 0 ? inicial : `${inicial} N.º ${numeros.join(", ")}`;
+}
+
+/** "Cuota que cubre" / "Cuotas que cubre". */
+export function etiquetaCuotasQueCubre(cantidad: number): string {
+    return cantidad === 1 ? "Cuota que cubre" : "Cuotas que cubre";
+}

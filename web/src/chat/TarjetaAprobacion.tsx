@@ -1,4 +1,5 @@
 import { Aviso, Boton, ChipEstado, Desglose, ListaDatos } from "../ui";
+import { etiquetaCuotasQueCubre } from "../utilidades/etiquetas";
 import { formatoFecha, formatoQuetzales } from "../utilidades/formato";
 
 /**
@@ -81,7 +82,7 @@ export function TarjetaAprobacion({
                         { etiqueta: "Crédito", valor: vista.idCredito },
                         { etiqueta: "Cliente", valor: vista.nombreCliente },
                         { etiqueta: "Fecha de operación", valor: formatoFecha(vista.fechaOperacion) },
-                        { etiqueta: "Cuota que cubre", valor: vista.cuotasCubiertas.join(", ") || "—" },
+                        { etiqueta: etiquetaCuotasQueCubre(vista.cuotasCubiertas.length), valor: vista.cuotasCubiertas.join(", ") || "—" },
                         { etiqueta: "Estado actual", valor: <ChipEstado estado={vista.estadoAntes.estado} /> }
                     ]}
                 />

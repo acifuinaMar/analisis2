@@ -1,10 +1,10 @@
 import { useState } from "react";
 
 import { buscarClientes } from "../api/cobro";
-import type { ResultadoBusquedaClientes } from "../api/contratos";
+import type { ClienteEncontrado, ResultadoBusquedaClientes } from "../api/contratos";
 import { ErrorApi } from "../api/cliente";
 import { useSesion } from "../estado/sesion";
-import { Aviso, AvisoError, Buscador, Cargando, EstadoVacio, Tarjeta } from "../ui";
+import { Aviso, AvisoError, Boton, Buscador, Cargando, EstadoVacio, Tarjeta } from "../ui";
 import { TarjetaCreditoResumen } from "./TarjetaCreditoResumen";
 
 /**
@@ -18,7 +18,16 @@ let ultima: { texto: string; resultado: ResultadoBusquedaClientes } | null = nul
 
 const MINIMO = 2;
 
-export function BusquedaClientes({ accion }: { accion: "detalle" | "cobro" }) {
+interface PropsBusquedaClientes {
+    readonly accion: "detalle" | "cobro";
+    /**
+     * Modo selección (originación, Fase 3): en vez de listar los créditos
+     * de cada cliente, ofrece «Elegir este cliente».
+     */
+    readonly alSeleccionar?: (cliente: ClienteEncontrado) => void;
+}
+
+export function BusquedaClientes({ accion, alSeleccionar }: PropsBusquedaClientes) {
     const { api } = useSesion();
 
     const [texto, setTexto] = useState(ultima?.texto ?? "");
@@ -94,7 +103,11 @@ export function BusquedaClientes({ accion }: { accion: "detalle" | "cobro" }) {
                                     <p className="mt-0.5 text-sm text-texto-suave">
                                         {c.idCliente} · DPI •••• {c.dpiTerminacion} · {c.municipio}
                                     </p>
-                                    {c.creditos.length === 0 ? (
+                                    {alSeleccionar ? (
+                                        <Boton className="mt-3" tamano="sm" onClick={() => alSeleccionar(c)}>
+                                            Elegir este cliente
+                                        </Boton>
+                                    ) : c.creditos.length === 0 ? (
                                         <p className="mt-3 text-sm text-texto-suave">Sin créditos registrados.</p>
                                     ) : (
                                         <ul className="mt-3 space-y-2" aria-label={`Créditos de ${c.nombreCompleto}`}>

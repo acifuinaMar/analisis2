@@ -59,6 +59,9 @@ navegador, así que no pueden escribir en PostgreSQL. Usan la extensión
 | `pruebas/operacion.prueba.ts` | reglas de la operación de pago idempotente (sin navegador) |
 | `pruebas/navegacion.prueba.ts` | rutas, perfiles, layouts, fecha de corte, panel del asistente |
 | `pruebas/cobro.prueba.ts` | búsqueda, detalle, mora y pago: vista previa, confirmación, reintento, resultado incierto, doble clic, invalidación, permisos, privacidad y 360 px |
+| `pruebas/originacion-reglas.prueba.ts` | reglas de la originación: TNA en %, clasificación de errores, verificación y almacenamiento (sin navegador) |
+| `pruebas/originacion.prueba.ts` | solicitud de crédito: camino feliz, duplicados, respuestas perdidas (alta y desembolso, aplicadas o no), conflicto, doble clic, recarga, perfil y 360 px |
+| `pruebas/vencimientos-plan.prueba.ts` | próximos vencimientos (inicio y pantalla, ventanas, vacío, error) y plan de amortización con el estado de cada cuota |
 | `pruebas/apiSimulada.ts` | API simulada CON ESTADO, tipada con los contratos reales de `src/` |
 
 La intercepción usa `page.route(url => url.pathname.startsWith("/api/"))`
@@ -139,11 +142,108 @@ Flujo del asesor, en el teléfono:
 | `sessionStorage` · `cv.fechaCorte` | fecha de corte (`AAAA-MM-DD`) | siempre |
 | `sessionStorage` · `cv.asistenteAbierto` | si el panel del asistente está abierto | gerencia |
 | `sessionStorage` · `cv.cobro.operacionPendiente` | `clave`, `idCredito`, `monto`, `fechaOperacion`, `canal`, `estado` | **solo** mientras una confirmación está pendiente o es incierta; se borra al cerrarse |
+| `sessionStorage` · `cv.originacion.pendiente` | `paso`, `estado`, `idCliente`, `idCredito`, `idAsesor`, `capital`, `plazoMeses`, `tnaAnual`, `fechaDesembolso` | **solo** mientras un alta o un desembolso está enviándose o es incierto; se borra al resolverse o descartarse |
 
-No se guarda el nombre del cliente, el DPI, el teléfono, el desglose ni
-el saldo. `localStorage` no se usa. El texto de la última búsqueda vive
+No se guarda el nombre del cliente, el DPI, el teléfono, el municipio,
+el desglose ni el saldo (tampoco en la originación: los datos personales
+del alta viven solo en memoria). `localStorage` no se usa. El texto de la última búsqueda vive
 solo en memoria (se pierde al recargar). La interfaz no escribe nada en
 la consola. `sessionStorage` desaparece al cerrar la pestaña.
+
+## Fase 3: perfil asesor completo
+
+### Próximos vencimientos (decisión D1)
+
+Complemento de G-6 **solo para el asesor**; el alcance del chat no cambia.
+`GET /api/vencimientos?fechaCorte=&ventanaDias=` (ambos perfiles en la API).
+
+- **Inicio** (`/asesor`): «Próximos 7 días» con la cantidad y el monto
+  que da el servidor y las tres primeras cuotas. «Ver todos» abre la
+  pantalla completa.
+- **Pantalla** (`/asesor/vencimientos?dias=7|15|30`): la ventana vive en la
+  URL. La ventana es (corte, corte + días]: la cuota que vence el mismo
+  día del corte ya es exigible y está en el cobro.
+- No hay botón «Cobrar»: una cuota que todavía no vence no es exigible. Se
+  ofrece «Ver crédito» para preparar la visita.
+
+### Plan de amortización
+
+`/asesor/creditos/:id/plan` (desde el detalle del crédito):
+`GET /api/creditos/:id/plan` con la fecha de corte. Cada cuota muestra el
+estado que da el servidor: **Pagada**, **Parcial**, **Pendiente** y
+**Vencida** (con los días de atraso). La interfaz no recalcula saldos ni
+suma totales; el plan de un crédito existente no trae totales.
+
+### Solicitud de crédito = originación (decisión D2)
+
+`/asesor/solicitud`. Solo originación (OP-3): no hay seguimiento de
+solicitudes ni estados que el backend no tenga.
+
+1. **Cliente**: nuevo (el alta es el primer paso) o existente (búsqueda).
+2. **Datos**: identificador del crédito, monto, plazo, **TNA en %** (D3:
+   «36» se envía como `0.36`, corriendo el punto sobre el texto) y asesor
+   (`GET /api/asesores`). La fecha de desembolso es la fecha de corte.
+3. **Revisión**: `POST /api/creditos/simulacion` (no guarda nada). Si
+   cambia un dato, la simulación anterior deja de valer.
+4. **Resultado**: con un clic, `POST /api/clientes` (si es nuevo) y
+   **después** `POST /api/creditos` con los datos simulados.
+
+### Reglas de la operación incierta (`src/originacion/operacionOriginacion.ts`)
+
+El backend tiene **dos escrituras independientes**, sin transacción común
+ni clave de idempotencia; solo los identificadores únicos (`CL-NNNN`,
+`CV-AAAA-NNNN`) impiden duplicar. Por eso:
+
+- **Solo un 201 confirma.** Sin respuesta (red, 5xx o 20 s) la escritura es
+  **«Resultado incierto»**: el formulario se bloquea y no se envía nada más.
+- **Con el alta incierta nunca se desembolsa.** Ni en ese momento ni
+  después de verificarla.
+- **Nada se reintenta solo.** El reintento es un clic, con los mismos datos,
+  y solo cuando la verificación dice que **no consta**. Un alta reintentada
+  y confirmada no encadena el desembolso: se pide otra confirmación.
+- **`CLIENTE_DUPLICADO`, `DPI_DUPLICADO` y `CREDITO_DUPLICADO` no son
+  éxitos.** En el primer envío son un rechazo (el identificador ya estaba
+  ocupado). Después de un envío incierto, el mismo 409 no prueba nada y la
+  escritura sigue incierta.
+- **Verificar es solo lectura** (`GET /api/clientes?buscar=`,
+  `GET /api/creditos/:id` y `/plan`), con tres desenlaces:
+  - *no consta*: se permite el reintento manual;
+  - *conflicto*: existe con otros datos visibles, así que no lo creó este
+    envío → rechazo, y se vuelve a corregir los datos;
+  - *coincidencia*: coinciden los datos visibles, pero **sigue incierto**.
+    Coincidir el nombre o el titular no basta.
+- Doble clic: barrera inmediata (`useRef`) además del bloqueo visual.
+- Al recargar, la operación pendiente se restaura como incierta y bloquea
+  una solicitud nueva hasta verificarla o descartarla (con confirmación).
+
+**Limitación del backend (documentada, sin cambios en el backend).** La API
+no devuelve un identificador de operación, ni el DPI completo, el teléfono
+o el asesor en las lecturas. Por eso la interfaz **no puede atribuir
+inequívocamente** un registro existente a un envío cuya respuesta se
+perdió, y usa el flujo conservador descrito: lo deja como incierto y no
+continúa con escrituras dependientes. Una mejora posible, que **requiere
+autorización** porque cambia el backend, sería aceptar una clave de
+idempotencia en `POST /api/clientes` y `POST /api/creditos` (como ya
+hace el registro de pagos) o devolver esos datos en las lecturas.
+
+### Trazabilidad pantalla ↔ caso de uso (decisión D4)
+
+Requisitos R1–R19 y casos de uso de `docs/proyecto1`; consultas G y
+operaciones OP del enunciado.
+
+| Pantalla | Ruta | Requisito / caso de uso | Enunciado | Endpoints |
+|---|---|---|---|---|
+| Inicio y próximos vencimientos | `/asesor` · `/asesor/vencimientos` | apoyo al cobro (planificar visitas) | G-6 (complemento, D1) | `GET /api/vencimientos` |
+| Buscar cliente | `/asesor/clientes` | apoyo a R8 y a R2 (cliente existente) | OP-1, OP-2 | `GET /api/clientes?buscar=` |
+| Solicitud de crédito | `/asesor/solicitud` | R1 Registrar clientes · R2 Solicitar crédito · R5 Desembolsar crédito · R6/R7 Generar plan y cuotas | OP-3 | `GET /api/asesores` · `POST /api/clientes` · `POST /api/creditos/simulacion` · `POST /api/creditos` |
+| Detalle del crédito | `/asesor/creditos/:id` | Consultar estado del crédito (R10) | G-5 | `GET /api/creditos/:id`, `/plan`, `/deuda` |
+| Plan de amortización | `/asesor/creditos/:id/plan` | R6 Generar plan de amortización · R7 cuotas | G-5 | `GET /api/creditos/:id/plan` |
+| Detalle de la mora | `/asesor/creditos/:id/mora` | Consultar estado del crédito | G-7 | `/cuotas/:n/mora`, `/cuotas/:n/deuda` |
+| Registro de pago | `/asesor/pagos?credito=ID` | R8 Registrar pago · R9 Prelación · R10 Estado · R11 Evento | OP-1, OP-2, OP-4, OP-5, OP-6 | `POST /api/creditos/:id/pagos` |
+
+R3 (evaluar) y R4 (aprobar o rechazar una solicitud) **no tienen pantalla**:
+el backend no guarda solicitudes ni sus estados, y la decisión D2 fue no
+inventarlos.
 
 ## Estructura
 
@@ -163,9 +263,12 @@ web/
     ├── api/
     │   ├── cliente.ts       única puerta a la API: X-Perfil y errores uniformes
     │   ├── contratos.ts     tipos de respuesta, importados de src/ (import type)
-    │   ├── cobro.ts         endpoints del cobro en campo
+    │   ├── cobro.ts         endpoints del cobro en campo y vencimientos
+    │   ├── originacion.ts   asesores, alta, simulación y desembolso
     │   └── useConsulta.ts   carga / error / datos, con cancelación
-    ├── cobro/               búsqueda, flujo de pago y reglas de la operación
+    ├── cobro/               búsqueda, flujo de pago, vencimientos y reglas de la operación
+    ├── originacion/         solicitud de crédito y reglas de la operación incierta
+    ├── plan/                tabla del plan de amortización
     ├── estado/              perfil y fecha de corte de la sesión
     ├── layouts/             LayoutAsesor (teléfono), LayoutGerencia (escritorio)
     ├── chat/                panel del asistente (E5) y tarjeta de aprobación
@@ -179,11 +282,12 @@ web/
 | Pantalla (E1) | Ruta | Fase |
 |---|---|---|
 | Buscar cliente | `/asesor/clientes` | ✅ 2 |
-| Solicitud de crédito | `/asesor/solicitud` | 3 |
+| Solicitud de crédito | `/asesor/solicitud` | ✅ 3 |
 | Detalle del crédito | `/asesor/creditos/:id` · `/gerencia/creditos/:id` | ✅ 2 · 4 |
 | Registro de pago | `/asesor/pagos?credito=ID` | ✅ 2 |
-| Plan de amortización | `/asesor/creditos/:id/plan` | 3 |
+| Plan de amortización | `/asesor/creditos/:id/plan` | ✅ 3 |
 | Detalle de la mora | `/asesor/creditos/:id/mora?cuota=n` | ✅ 2 |
+| Próximos vencimientos (complemento, D1) | `/asesor` · `/asesor/vencimientos?dias=` | ✅ 3 |
 | Tablero gerencial | `/gerencia` · `/gerencia/mora/:tramo` | 4 |
 | Cierre diario / mensual | `/gerencia/cierre` | 4 |
 | Chat gerencial (E5) | panel lateral en todo el layout de gerencia | 5 |

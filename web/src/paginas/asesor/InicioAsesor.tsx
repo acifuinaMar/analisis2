@@ -1,8 +1,10 @@
+import { obtenerVencimientos } from "../../api/cobro";
+import { useConsulta } from "../../api/useConsulta";
 import { Enlace } from "../../app/enrutador";
+import { ListaVencimientos } from "../../cobro/ListaVencimientos";
 import { useSesion } from "../../estado/sesion";
-import { Icono, Tarjeta, TituloSeccion, type NombreIcono } from "../../ui";
-import { formatoFechaLarga } from "../../utilidades/formato";
-import { PantallaPendiente } from "../PantallaPendiente";
+import { AvisoError, BotonEnlace, Cargando, Icono, Tarjeta, TituloSeccion, type NombreIcono } from "../../ui";
+import { formatoFechaLarga, formatoQuetzales } from "../../utilidades/formato";
 
 interface Accion {
     readonly a: string;
@@ -52,14 +54,45 @@ export function InicioAsesor() {
                 </ul>
             </section>
 
-            <PantallaPendiente
-                titulo="Próximos vencimientos"
-                subtitulo="Cuotas que vencen en los próximos días, para planificar las visitas."
-                fase="Fase posterior"
-                referencia="capacidad «Ver próximos vencimientos» (G-6)"
-                endpoints={["GET /api/vencimientos?fechaCorte=&ventanaDias=7"]}
-                silueta="tabla"
-            />
+            <ResumenVencimientos />
         </div>
+    );
+}
+
+/** Cuántas cuotas se muestran en el inicio; el resto, en la pantalla completa. */
+const MAXIMO_EN_INICIO = 3;
+
+/**
+ * Resumen de los próximos 7 días (GET /api/vencimientos). Cantidad y monto
+ * son los del servidor; aquí solo se recorta la lista para el inicio.
+ */
+function ResumenVencimientos() {
+    const { api, fechaCorte } = useSesion();
+    const r = useConsulta(s => obtenerVencimientos(api, fechaCorte, 7, s), [fechaCorte]);
+    const d = r.datos;
+
+    return (
+        <section aria-labelledby="titulo-vencimientos">
+            <TituloSeccion accion={<BotonEnlace a="/asesor/vencimientos?dias=7" variante="fantasma" tamano="sm">Ver todos</BotonEnlace>}>
+                <span id="titulo-vencimientos">Próximos 7 días</span>
+            </TituloSeccion>
+            {r.cargando && !d ? <Cargando texto="Consultando vencimientos…" /> : null}
+            {r.error ? <AvisoError error={r.error} alReintentar={r.recargar} /> : null}
+            {d && !r.error ? (
+                d.cantidadCuotas === 0 ? (
+                    <p className="rounded-tarjeta border border-borde bg-superficie p-4 text-sm text-texto-suave">
+                        Ninguna cuota vence en los próximos 7 días.
+                    </p>
+                ) : (
+                    <div className="space-y-3">
+                        <p className="text-sm text-texto-medio">
+                            <strong className="text-texto">{d.cantidadCuotas}</strong> {d.cantidadCuotas === 1 ? "cuota" : "cuotas"} por{" "}
+                            <strong className="cifra text-texto">{formatoQuetzales(d.montoTotal)}</strong>
+                        </p>
+                        <ListaVencimientos cuotas={d.cuotas.slice(0, MAXIMO_EN_INICIO)} />
+                    </div>
+                )
+            ) : null}
+        </section>
     );
 }

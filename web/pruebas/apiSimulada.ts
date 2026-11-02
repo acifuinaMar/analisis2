@@ -1,12 +1,17 @@
 import type { Page, Route } from "@playwright/test";
 
 import type {
+    CuerpoDesembolso,
     DeudaCuota,
     DeudaExigible,
     EstadoCredito,
     ExplicacionMora,
     PlanDeCredito,
+    PlanSimulado,
+    ProximosVencimientos,
+    RespuestaAsesores,
     ResultadoBusquedaClientes,
+    ResultadoDesembolso,
     ResultadoPago
 } from "../src/api/contratos";
 
@@ -44,6 +49,18 @@ export interface OpcionesSimulacion {
     retrasoBusquedaMs?: number;
     /** La búsqueda responde 503. */
     busquedaFalla?: boolean;
+    /** GET /api/vencimientos responde 503. */
+    vencimientosFalla?: boolean;
+    /**
+     * Pierde la respuesta del PRÓXIMO alta de cliente (una vez):
+     *   "aplicando"   el cliente SÍ se crea y la respuesta no llega;
+     *   "sin_aplicar" la petición se corta antes de crear nada.
+     */
+    perderAlta?: "aplicando" | "sin_aplicar";
+    /** Igual, para el próximo desembolso. */
+    perderDesembolso?: "aplicando" | "sin_aplicar";
+    /** Demora de las escrituras de la originación (para el doble clic). */
+    retrasoEscrituraMs?: number;
 }
 
 export interface Simulacion {
@@ -53,6 +70,9 @@ export interface Simulacion {
     pagos(): Pedida[];
     confirmaciones(): Pedida[];
     vistasPrevias(): Pedida[];
+    altas(): Pedida[];
+    desembolsos(): Pedida[];
+    simulaciones(): Pedida[];
     opciones: OpcionesSimulacion;
 }
 
@@ -81,6 +101,29 @@ function desgloseDe(fechaCorte: string) {
         : { gastos: 25, interesMoratorio: 9.56, interesCorriente: 200, capital: 1000, total: 1234.56 };
 }
 
+/**
+ * Plan simulado de PRUEBA: cifras fijas por cuota, no un cálculo. Solo
+ * importa que la interfaz muestre lo que "devuelve el servidor".
+ */
+function planSimulado(capital: number, plazo: number, tna: number, fecha: string): PlanSimulado {
+    return {
+        capital,
+        plazoMeses: plazo,
+        tnaAnual: tna,
+        fechaDesembolso: fecha,
+        cuotas: Array.from({ length: plazo }, (_, i) => ({
+            numero: i + 1,
+            fechaVencimiento: `2027-${String((i % 12) + 1).padStart(2, "0")}-15`,
+            saldoInicial: 9999.99,
+            cuota: 1004.62,
+            interes: 171.3,
+            capital: 833.32,
+            saldoFinal: 9166.67
+        })),
+        totales: { cuotas: 12055.45, intereses: 2055.45, capital }
+    };
+}
+
 function normalizar(t: string) {
     return t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
@@ -97,8 +140,18 @@ export async function simularApi(page: Page, opciones: OpcionesSimulacion = {}):
         opciones,
         pagos: () => pedidas.filter(p => p.metodo === "POST" && p.ruta.endsWith("/pagos")),
         confirmaciones: () => sim.pagos().filter(p => p.cuerpo?.confirmado === true),
-        vistasPrevias: () => sim.pagos().filter(p => p.cuerpo?.confirmado !== true)
+        vistasPrevias: () => sim.pagos().filter(p => p.cuerpo?.confirmado !== true),
+        altas: () => pedidas.filter(p => p.metodo === "POST" && p.ruta === "/api/clientes"),
+        desembolsos: () => pedidas.filter(p => p.metodo === "POST" && p.ruta === "/api/creditos"),
+        simulaciones: () => pedidas.filter(p => p.metodo === "POST" && p.ruta === "/api/creditos/simulacion")
     };
+
+    // Estado PROPIO de esta simulación: lo que se crea no se filtra a otras pruebas.
+    const clientes = CLIENTES.map(c => ({ ...c, creditos: [...c.creditos] }));
+    const creditosCreados = new Map<string, CuerpoDesembolso>();
+    const esperar = () => opciones.retrasoEscrituraMs
+        ? new Promise(r => setTimeout(r, opciones.retrasoEscrituraMs))
+        : Promise.resolve();
 
     const pagado = (idCredito: string) => idCredito === CREDITO_MORA && aplicadas.length > 0;
 
@@ -137,7 +190,7 @@ export async function simularApi(page: Page, opciones: OpcionesSimulacion = {}):
             }
             const buscar = (url.searchParams.get("buscar") ?? "").trim();
             const q = normalizar(buscar);
-            const encontrados = CLIENTES.filter(c =>
+            const encontrados = clientes.filter(c =>
                 normalizar(c.nombreCompleto).includes(q)
                 || c.idCliente.toLowerCase().includes(q)
                 || c.creditos.some(k => k.toLowerCase().includes(q))
@@ -157,13 +210,151 @@ export async function simularApi(page: Page, opciones: OpcionesSimulacion = {}):
             return responder(ruta, 200, r);
         }
 
+        // --- Próximos vencimientos (ambos perfiles) -------------------------
+        if (p === "/api/vencimientos") {
+            if (opciones.vencimientosFalla) {
+                return error(ruta, 503, "SIN_API", "Servicio no disponible (simulado).");
+            }
+            const ventana = Number(url.searchParams.get("ventanaDias"));
+            if (!Number.isInteger(ventana) || ventana < 1 || ventana > 365) {
+                return error(ruta, 400, "VALIDACION", "La peticion no cumple el contrato.");
+            }
+            const todas = fechaCorte === "2027-06-01" ? [] : [
+                { idCredito: CREDITO_AL_DIA, idCliente: "CL-0099", nombreCliente: "Carla Prueba Tres", numeroCuota: 4, fechaVencimiento: "2026-11-02", diasParaVencer: 2, montoCuota: 520.4, montoPendiente: 520.4 },
+                { idCredito: CREDITO_MORA, idCliente: "CL-0060", nombreCliente: "Ana Lucía Prueba Uno", numeroCuota: 4, fechaVencimiento: "2026-11-06", diasParaVencer: 6, montoCuota: 520.4, montoPendiente: 300 },
+                { idCredito: CREDITO_AL_DIA, idCliente: "CL-0099", nombreCliente: "Carla Prueba Tres", numeroCuota: 5, fechaVencimiento: "2026-11-28", diasParaVencer: 28, montoCuota: 520.4, montoPendiente: 520.4 }
+            ];
+            const cuotas = todas.filter(c => c.diasParaVencer <= ventana);
+            // Totales fijos por ventana, como si los diera el servidor (no se suman aquí).
+            const montoTotal = cuotas.length === 0 ? 0 : ventana >= 30 ? 820.4 : cuotas.length === 2 ? 820.4 : 520.4;
+            const r: ProximosVencimientos = {
+                fechaCorte,
+                ventanaDias: ventana,
+                hasta: ventana >= 30 ? "2026-11-30" : "2026-11-07",
+                cantidadCuotas: cuotas.length,
+                creditosInvolucrados: new Set(cuotas.map(c => c.idCredito)).size,
+                montoTotal,
+                cuotas
+            };
+            return responder(ruta, 200, r);
+        }
+
+        // --- Originación (solo asesor) ----------------------------------------
+        if (p === "/api/asesores") {
+            if (perfil !== "asesor") {
+                return error(ruta, 403, "PERFIL_SIN_PERMISO", "El perfil no tiene permiso para esta operacion.");
+            }
+            const r: RespuestaAsesores = { asesores: [
+                { idAsesor: "AS-01", nombreCompleto: "Asesor Prueba Uno" },
+                { idAsesor: "AS-02", nombreCompleto: "Asesor Prueba Dos" }
+            ] };
+            return responder(ruta, 200, r);
+        }
+
+        if (p === "/api/clientes" && metodo === "POST") {
+            if (perfil !== "asesor") {
+                return error(ruta, 403, "PERFIL_SIN_PERMISO", "El perfil no tiene permiso para esta operacion.");
+            }
+            const b = cuerpo ?? {};
+            if (opciones.perderAlta === "sin_aplicar") {
+                opciones.perderAlta = undefined;
+                return ruta.abort("connectionreset");
+            }
+            await esperar();
+            const id = String(b.idCliente);
+            if (clientes.some(c => c.idCliente === id)) {
+                return error(ruta, 409, "CLIENTE_DUPLICADO", `El cliente ${id} ya existe.`);
+            }
+            if (clientes.some(c => c.dpi === b.dpi)) {
+                return error(ruta, 409, "DPI_DUPLICADO", `Ya existe un cliente con el DPI ${String(b.dpi)}.`);
+            }
+            clientes.push({ idCliente: id, nombreCompleto: String(b.nombreCompleto), dpi: String(b.dpi), municipio: String(b.municipio), creditos: [] });
+            if (opciones.perderAlta === "aplicando") {
+                opciones.perderAlta = undefined;
+                return ruta.abort("connectionreset");
+            }
+            return responder(ruta, 201, { idCliente: id, nombreCompleto: b.nombreCompleto, municipio: b.municipio });
+        }
+
+        if (p === "/api/creditos/simulacion" && metodo === "POST") {
+            if (perfil !== "asesor") {
+                return error(ruta, 403, "PERFIL_SIN_PERMISO", "El perfil no tiene permiso para esta operacion.");
+            }
+            const b = cuerpo ?? {};
+            const capital = Number(b.capital);
+            const plazo = Number(b.plazoMeses);
+            if (capital < 1000 || capital > 25000) {
+                return error(ruta, 400, "CAPITAL_FUERA_DE_RANGO", "El capital debe estar entre Q1000 y Q25000.", { minimo: 1000, maximo: 25000 });
+            }
+            if (plazo < 3 || plazo > 24) {
+                return error(ruta, 400, "PLAZO_FUERA_DE_RANGO", "El plazo debe ser un numero entero de meses entre 3 y 24.", { minimo: 3, maximo: 24 });
+            }
+            return responder(ruta, 200, planSimulado(capital, plazo, Number(b.tnaAnual), String(b.fechaDesembolso)));
+        }
+
+        if (p === "/api/creditos" && metodo === "POST") {
+            if (perfil !== "asesor") {
+                return error(ruta, 403, "PERFIL_SIN_PERMISO", "El perfil no tiene permiso para esta operacion.");
+            }
+            const b = cuerpo as unknown as CuerpoDesembolso;
+            if (opciones.perderDesembolso === "sin_aplicar") {
+                opciones.perderDesembolso = undefined;
+                return ruta.abort("connectionreset");
+            }
+            await esperar();
+            const existe = creditosCreados.has(b.idCredito) || clientes.some(c => c.creditos.includes(b.idCredito));
+            if (existe) {
+                return error(ruta, 409, "CREDITO_DUPLICADO", `El credito ${b.idCredito} ya existe.`);
+            }
+            const titular = clientes.find(c => c.idCliente === b.idCliente);
+            if (!titular) {
+                return error(ruta, 422, "CLIENTE_INEXISTENTE", `El cliente ${b.idCliente} no existe.`);
+            }
+            creditosCreados.set(b.idCredito, b);
+            titular.creditos.push(b.idCredito);
+            if (opciones.perderDesembolso === "aplicando") {
+                opciones.perderDesembolso = undefined;
+                return ruta.abort("connectionreset");
+            }
+            const r: ResultadoDesembolso = {
+                idCredito: b.idCredito,
+                idCliente: b.idCliente,
+                idAsesor: b.idAsesor,
+                plan: planSimulado(b.capital, b.plazoMeses, b.tnaAnual, b.fechaDesembolso)
+            };
+            return responder(ruta, 201, r);
+        }
+
         const m = /^\/api\/creditos\/([^/]+)(\/.*)?$/.exec(p);
         if (!m) {
             return error(ruta, 404, "RUTA_INEXISTENTE", `No existe la ruta ${metodo} ${p}.`);
         }
         const idCredito = decodeURIComponent(m[1]!);
         const resto = m[2] ?? "";
-        const cliente = CLIENTES.find(c => c.creditos.includes(idCredito));
+
+        // Créditos creados en esta prueba: se devuelven con SUS términos.
+        const creado = creditosCreados.get(idCredito);
+        if (creado) {
+            const titular = clientes.find(c => c.idCliente === creado.idCliente)!;
+            if (resto === "/plan") {
+                const ps = planSimulado(creado.capital, creado.plazoMeses, creado.tnaAnual, creado.fechaDesembolso);
+                const r: PlanDeCredito = {
+                    idCredito, fechaCorte, capital: creado.capital, plazoMeses: creado.plazoMeses,
+                    tnaAnual: creado.tnaAnual, fechaDesembolso: creado.fechaDesembolso,
+                    cuotas: ps.cuotas.map(f => ({ ...f, capitalPagado: 0, interesPagado: 0, estado: "pendiente" as const, vencida: false, diasAtraso: 0 }))
+                };
+                return responder(ruta, 200, r);
+            }
+            const r = {
+                idCredito, idCliente: creado.idCliente, nombreCliente: titular.nombreCompleto, fechaCorte,
+                estado: "vigente", tramo: "al_dia", reestructurado: false,
+                capitalDesembolsado: creado.capital, saldoCapital: creado.capital, diasAtraso: 0,
+                cuotasPagadas: 0, cuotasVencidas: 0
+            } as unknown as EstadoCredito;
+            return responder(ruta, 200, r);
+        }
+
+        const cliente = clientes.find(c => c.creditos.includes(idCredito));
         if (!cliente) {
             return error(ruta, 404, "CREDITO_INEXISTENTE", `No existe el credito ${idCredito}.`);
         }
@@ -220,7 +411,21 @@ export async function simularApi(page: Page, opciones: OpcionesSimulacion = {}):
                     estado: (n === 1 || !enMora ? "pagada" : "pendiente") as "pagada" | "pendiente",
                     vencida: true,
                     diasAtraso: n === 1 || !enMora ? 0 : 45
-                }))
+                })).concat([{
+                    // Cuota 4, aún no vencida: pendiente (en mora) o con un abono parcial (al día).
+                    numero: 4,
+                    fechaVencimiento: "2026-12-06",
+                    saldoInicial: 1560,
+                    cuota: 520.4,
+                    interes: 40.4,
+                    capital: 480,
+                    saldoFinal: 1080,
+                    capitalPagado: enMora ? 0 : 100,
+                    interesPagado: 0,
+                    estado: (enMora ? "pendiente" : "parcial") as "pagada" | "pendiente",
+                    vencida: false,
+                    diasAtraso: 0
+                }])
             };
             return responder(ruta, 200, r);
         }

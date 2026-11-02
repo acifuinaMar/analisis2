@@ -25,7 +25,7 @@ interface ItemMenu {
 }
 
 const MENU: ReadonlyArray<ItemMenu> = [
-    { a: "/asesor", etiqueta: "Inicio", icono: "inicio", exacta: true, tambien: ["/asesor/solicitud"] },
+    { a: "/asesor", etiqueta: "Inicio", icono: "inicio", exacta: true, tambien: ["/asesor/solicitud", "/asesor/vencimientos"] },
     { a: "/asesor/clientes", etiqueta: "Clientes", icono: "clientes", tambien: ["/asesor/creditos"] },
     { a: "/asesor/pagos", etiqueta: "Pagos", icono: "tarjeta" },
     { a: "/asesor/mas", etiqueta: "Más", icono: "mas" }
