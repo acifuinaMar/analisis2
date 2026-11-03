@@ -3,6 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 import { INSTRUCCIONES_RAG } from "./instruccionesRAG";
 import { evaluarRespuesta } from "./evaluarRespuesta";
 import { reintentarGemini } from "./reintentarGemini";
+import { modeloGeminiConfigurado } from "../adaptadores/modelo-gemini";
 import {
   buscarFragmentos,
   type ResultadoBusqueda,
@@ -56,7 +57,7 @@ ${fragmento.contenido}
   const cliente = new GoogleGenAI({ apiKey });
 
   const resultado = await reintentarGemini(() => cliente.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: modeloGeminiConfigurado(),
     contents: `
 PREGUNTA DEL USUARIO:
 ${pregunta}

@@ -259,3 +259,66 @@ describe("Adaptador Gemini - construccion", () => {
         expect(m.nombre).toBe("gemini-3.8-flash");
     });
 });
+
+/**
+ * Gemini 3 devuelve una "thought signature" en la parte de cada llamada a
+ * funcion y exige recibirla de vuelta en el historial: sin ella responde
+ * 400 "Function call is missing a thought_signature in functionCall parts".
+ * El adaptador la conserva sin leerla ni modificarla.
+ */
+describe("Adaptador Gemini - thought signatures (Gemini 3)", () => {
+
+    const conFirma = {
+        candidates: [{
+            content: {
+                parts: [
+                    { functionCall: { name: "consultar_cartera", args: { fechaCorte: "2026-10-31" } }, thoughtSignature: "FIRMA-1" },
+                    { functionCall: { name: "consultar_credito", args: { idCredito: "CV-2026-0043" } } }
+                ]
+            }
+        }],
+        // El atajo del SDK, que NO trae la firma: no debe usarse.
+        functionCalls: [{ name: "consultar_cartera", args: {} }]
+    };
+
+    it("Lee la firma de la parte de cada llamada, no del atajo functionCalls", () => {
+
+        const turno = aTurno(conFirma);
+
+        expect(turno).toEqual({
+            tipo: "llamadas",
+            llamadas: [
+                { nombre: "consultar_cartera", argumentos: { fechaCorte: "2026-10-31" }, firma: "FIRMA-1" },
+                // En llamadas paralelas solo la primera trae firma.
+                { nombre: "consultar_credito", argumentos: { idCredito: "CV-2026-0043" } }
+            ]
+        });
+    });
+
+    it("Devuelve la firma en la misma parte de la llamada, en el mismo orden", () => {
+
+        const turno = aTurno(conFirma);
+        if (turno.tipo !== "llamadas") throw new Error("deberia ser llamadas");
+
+        const c = aContenidos([
+            { papel: "usuario", texto: "¿Cuantos creditos hay en cartera?" },
+            { papel: "asistente_llama", llamadas: turno.llamadas }
+        ]);
+
+        expect(c[1].role).toBe("model");
+        expect(c[1].parts).toEqual([
+            { functionCall: { name: "consultar_cartera", args: { fechaCorte: "2026-10-31" } }, thoughtSignature: "FIRMA-1" },
+            { functionCall: { name: "consultar_credito", args: { idCredito: "CV-2026-0043" } } }
+        ]);
+    });
+
+    it("Sin firma (modelos anteriores o guiones de prueba) no agrega el campo", () => {
+
+        const c = aContenidos([{
+            papel: "asistente_llama",
+            llamadas: [{ nombre: "consultar_cartera", argumentos: {} }]
+        }]);
+
+        expect(c[0].parts?.[0]).not.toHaveProperty("thoughtSignature");
+    });
+});
