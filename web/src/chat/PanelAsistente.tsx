@@ -9,10 +9,15 @@ import { formatoFechaLarga } from "../utilidades/formato";
  * Panel lateral del asistente gerencial (E5), dentro de la misma
  * aplicación del E1.
  *
- * FASE 1: estructura visual. La conversación se conecta en la fase del
- * chat, porque la API todavía no expone rutas para el orquestador
- * (src/api/app.ts no tiene /api/chat). Mientras tanto, el panel muestra
- * su forma final sin inventar respuestas.
+ * ESTADO INFORMATIVO (Fase 4, decisión D1): src/api/app.ts no expone
+ * ninguna ruta HTTP hacia el orquestador (src/asistente/orquestador.ts),
+ * que hoy se opera por consola con `npm run chat`. Sin esa ruta la web no
+ * puede conversar, y el panel lo dice en vez de simular respuestas: no
+ * hay campo de texto ni botón de enviar que no hagan nada.
+ *
+ * La aprobación de pagos NO pasa por aquí: en la web, un pago solo se
+ * registra en «Registro de pago», con vista previa y confirmación
+ * explícita del asesor.
  *
  * Distribución (preferencia del equipo):
  *   escritorio (lg+)  columna de 400 px a la derecha; el tablero sigue
@@ -81,45 +86,37 @@ export function PanelAsistente({ abierto, alCerrar, perfil }: PropsPanelAsistent
             <div className="flex-1 space-y-4 overflow-y-auto bg-fondo p-4">
                 <div className="rounded-tarjeta border border-borde bg-superficie p-4 text-sm text-texto-medio">
                     <p>
-                        Pregunte en lenguaje natural por la cartera, un crédito, un cierre o una política. Las consultas
-                        usan la fecha de corte del encabezado: <strong>{formatoFechaLarga(fechaCorte)}</strong>.
+                        El asistente responde en lenguaje natural sobre la cartera, un crédito, un cierre o una política,
+                        con las cifras del núcleo y la fuente de cada política. La fecha de corte de esta sesión es
+                        el <strong>{formatoFechaLarga(fechaCorte)}</strong>.
                     </p>
                     {perfil === "gerencia" ? (
                         <p className="mt-2 text-xs text-texto-suave">
-                            Con el perfil gerencia puede revisar el desglose de un pago propuesto, pero no aplicarlo.
+                            Con el perfil gerencia el asistente solo consulta: puede mostrar el desglose de un pago
+                            propuesto, pero no aplicarlo.
                         </p>
                     ) : null}
                 </div>
 
-                <Aviso tipo="alerta" titulo="Conversación pendiente de conexión">
-                    El panel se conecta al orquestador en la fase del chat. La API todavía no expone las rutas del
-                    asistente; mientras tanto no se envía ninguna pregunta.
+                <Aviso tipo="alerta" titulo="El asistente no está disponible en la web">
+                    La API de esta versión no tiene una ruta para conversar con el asistente, así que desde aquí no se
+                    envía ninguna pregunta ni se muestra ninguna respuesta. Las cifras de esta pantalla vienen del
+                    mismo núcleo que usaría el asistente.
                 </Aviso>
-            </div>
 
-            <form
-                className="border-t border-borde bg-superficie p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-                onSubmit={e => e.preventDefault()}
-            >
-                <label htmlFor="pregunta-asistente" className="sr-only">Pregunta para el asistente</label>
-                <div className="flex items-end gap-2">
-                    <textarea
-                        id="pregunta-asistente"
-                        rows={2}
-                        disabled
-                        placeholder="Disponible en la fase del chat"
-                        className="min-h-11 flex-1 resize-none rounded-lg border border-borde-fuerte bg-superficie-activa px-3 py-2.5 text-sm placeholder:text-texto-suave"
-                    />
-                    <button
-                        type="submit"
-                        disabled
-                        aria-label="Enviar pregunta"
-                        className="flex size-11 items-center justify-center rounded-lg bg-marca text-white disabled:opacity-40"
-                    >
-                        <Icono nombre="enviar" tamano={18} />
-                    </button>
-                </div>
-            </form>
+                <section aria-labelledby="asistente-consola" className="rounded-tarjeta border border-borde bg-superficie p-4 text-sm text-texto-medio">
+                    <h3 id="asistente-consola" className="font-semibold text-texto">Para la demostración: asistente por consola</h3>
+                    <p className="mt-1">En la raíz del proyecto (requiere <code className="font-mono text-xs">GEMINI_API_KEY</code> en <code className="font-mono text-xs">.env</code>):</p>
+                    <ul className="mt-2 space-y-1 font-mono text-xs text-texto">
+                        <li>npm run chat</li>
+                        <li>npm run chat -- --perfil asesor</li>
+                    </ul>
+                    <p className="mt-2 text-xs text-texto-suave">
+                        Abre como gerencia, que solo consulta. Un pago propuesto por el asistente siempre muestra su
+                        desglose y espera la aprobación explícita de un asesor; la gerencia no puede aplicarlo.
+                    </p>
+                </section>
+            </div>
         </aside>
     );
 }

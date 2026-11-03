@@ -5,19 +5,45 @@ Interfaz React del Proyecto Final. **Consume la API REST existente**
 PostgreSQL, MCP ni el núcleo, y **no calcula ninguna cifra**. Montos,
 saldos, mora y porcentajes llegan de la API; la interfaz solo los formatea.
 
-Estado:
+Estado: **interfaz completa para la demostración** (Fases 1 a 4).
 
 - **Fase 1** — estructura, rutas, diseño base, navegación y componentes.
-- **Fase 2** — cobro en campo del asesor, conectado a la API real:
-  buscar cliente, detalle del crédito, detalle de la mora y registro de
-  pago con vista previa, confirmación explícita e idempotencia.
+- **Fase 2** — cobro en campo del asesor: buscar cliente, detalle del
+  crédito, detalle de la mora y registro de pago con vista previa,
+  confirmación explícita e idempotencia.
+- **Fase 3** — perfil asesor completo: solicitud de crédito (alta,
+  simulación y desembolso con reglas de resultado incierto), próximos
+  vencimientos y plan de amortización.
+- **Fase 4** — perfil gerencia: tablero de indicadores, cartera en mora
+  por tramo, cierres diario y mensual y detalle del crédito de solo
+  consulta. Asistente en estado informativo (ver «Limitaciones»).
 
-Las demás pantallas muestran su estructura y los endpoints que van a
-consumir; se conectan en las fases siguientes.
+Ninguna pantalla muestra cifras de relleno: si la API no responde, se ve
+un aviso con «Reintentar».
+
+## Funcionalidades finales
+
+| Perfil | Funcionalidad | Ruta |
+|---|---|---|
+| Asesor (teléfono) | Inicio con próximos 7 días y accesos | `/asesor` |
+| | Próximos vencimientos a 7, 15 y 30 días | `/asesor/vencimientos?dias=` |
+| | Buscar cliente (nombre, DPI, `CL-NNNN`, `CV-AAAA-NNNN`) | `/asesor/clientes` |
+| | Detalle del crédito, de la mora y plan de amortización | `/asesor/creditos/:id` · `/mora` · `/plan` |
+| | Registro de pago: vista previa → confirmación explícita | `/asesor/pagos?credito=ID` |
+| | Solicitud de crédito: cliente nuevo o existente → simulación → desembolso | `/asesor/solicitud` |
+| Gerencia (escritorio) | Tablero: cartera activa, en mora, en riesgo, incobrable y riesgo por categoría | `/gerencia` |
+| | Cartera en mora, con filtro por tramo | `/gerencia/mora` · `/gerencia/mora/:tramo` |
+| | Cierre diario (fecha de corte) y mensual (mes elegible) | `/gerencia/cierre?tipo=&periodo=` |
+| | Detalle del crédito, mora y plan, **solo consulta** | `/gerencia/creditos/:id` · `/mora` · `/plan` |
+| | Panel del asistente (informativo) | en todo el layout de gerencia |
+| Ambos | Selección de perfil de demostración y fecha de corte | `/perfil` · encabezado |
 
 ## Puesta en marcha
 
-Requiere Node.js 22 y la API corriendo.
+Requisitos: Node.js 22, las dependencias instaladas en la raíz y en
+`web/` y la API corriendo (`npm run api` usa el `.env` de la raíz, que
+la interfaz nunca lee). Para las pruebas basta Chromium de Playwright:
+no necesitan la API ni la base de datos.
 
 ```bash
 # 1. En la raíz del proyecto (otra terminal): la API sobre la cartera cargada
@@ -62,6 +88,7 @@ navegador, así que no pueden escribir en PostgreSQL. Usan la extensión
 | `pruebas/originacion-reglas.prueba.ts` | reglas de la originación: TNA en %, clasificación de errores, verificación y almacenamiento (sin navegador) |
 | `pruebas/originacion.prueba.ts` | solicitud de crédito: camino feliz, duplicados, respuestas perdidas (alta y desembolso, aplicadas o no), conflicto, doble clic, recarga, perfil y 360 px |
 | `pruebas/vencimientos-plan.prueba.ts` | próximos vencimientos (inicio y pantalla, ventanas, vacío, error) y plan de amortización con el estado de cada cuota |
+| `pruebas/gerencia.prueba.ts` | tablero, cartera en mora y filtros, cierres diario y mensual, detalle de solo lectura, vacíos, errores, carga, asistente informativo, protección por perfil, cambio de perfil, 360 px, tableta y escritorio |
 | `pruebas/apiSimulada.ts` | API simulada CON ESTADO, tipada con los contratos reales de `src/` |
 
 La intercepción usa `page.route(url => url.pathname.startsWith("/api/"))`
@@ -240,10 +267,122 @@ operaciones OP del enunciado.
 | Plan de amortización | `/asesor/creditos/:id/plan` | R6 Generar plan de amortización · R7 cuotas | G-5 | `GET /api/creditos/:id/plan` |
 | Detalle de la mora | `/asesor/creditos/:id/mora` | Consultar estado del crédito | G-7 | `/cuotas/:n/mora`, `/cuotas/:n/deuda` |
 | Registro de pago | `/asesor/pagos?credito=ID` | R8 Registrar pago · R9 Prelación · R10 Estado · R11 Evento | OP-1, OP-2, OP-4, OP-5, OP-6 | `POST /api/creditos/:id/pagos` |
+| Tablero gerencial | `/gerencia` | R16 Consultar cartera en riesgo | G-1 | `GET /api/cartera` |
+| Cartera en mora | `/gerencia/mora/:tramo` | R16 Consultar cartera en riesgo | G-4 | `GET /api/cartera/mora` |
+| Cierres | `/gerencia/cierre` | R15 Generar cierre mensual · R17 Consultar reportes | G-2, G-3 | `GET /api/cierres/diario`, `/mensual` |
+| Detalle del crédito (gerencia) | `/gerencia/creditos/:id` | Consultar estado del crédito (R10) | G-5, G-7 | `GET /api/creditos/:id`, `/plan`, `/deuda`, `/cuotas/:n/mora` |
 
 R3 (evaluar) y R4 (aprobar o rechazar una solicitud) **no tienen pantalla**:
 el backend no guarda solicitudes ni sus estados, y la decisión D2 fue no
 inventarlos.
+
+## Fase 4: perfil gerencia
+
+Todo es lectura; la gerencia no escribe nada en la API.
+
+### Tablero (G-1) · `GET /api/cartera?fechaCorte=`
+
+- Cuatro indicadores con las cifras y porcentajes del servidor:
+  **cartera activa** (con `creditosActivos`), **cartera en mora** (al
+  menos un día de atraso), **cartera en riesgo** (más de 30 días o
+  reestructurado) y **dado por incobrable** (saldo dado de baja al corte).
+  Mora y riesgo son indicadores distintos y se rotulan así.
+- Aviso de **candidatos a incobrable** (más de 120 días sin dar de baja)
+  con su saldo, porque darlos de baja baja el porcentaje en riesgo sin
+  cobrar nada.
+- **Cartera en riesgo por categoría** (`desglosePorTramo`): barras y
+  tabla con créditos, saldo y % de la activa; el total es `montoEnRiesgo`
+  / `porcentajeEnRiesgo` del servidor (la tabla no suma). Cada tramo
+  enlaza a su listado; «Reestructurado al día» no es un tramo de mora y
+  no tiene listado.
+
+### Cartera en mora (G-4) · `GET /api/cartera/mora?fechaCorte=&tramo=`
+
+Pestañas Todos / Mora 1 / Mora 2 / Mora 3 / Vencido (el tramo en la URL).
+Cantidad y saldo total del servidor; tabla con crédito, cliente, días,
+tramo, estado (y marca de reestructurado), cuotas vencidas y saldo. El
+identificador del crédito es un enlace (accesible con teclado) y la fila
+entera también abre el detalle. Un tramo inválido muestra un aviso sin
+consultar la API.
+
+### Cierres (G-2, G-3) · `GET /api/cierres/diario` · `GET /api/cierres/mensual`
+
+- **Diario**: el día de la fecha de corte del encabezado.
+- **Mensual**: abre en el mes de la fecha de corte y se elige otro con
+  «Mes del cierre» (decisión D3); tipo y mes quedan en la URL.
+- Desembolsos y pagos (cantidad y monto), **flujo neto** (puede ser
+  negativo y se explica) y recuperaciones en el orden de la prelación,
+  incluido el excedente abonado a capital, con el total del servidor.
+  Sin movimientos se informa y se muestran los ceros que da la API.
+
+### Detalle del crédito para gerencia (G-5, G-7)
+
+Decisión D2: **solo consulta**. Reutiliza las pantallas del asesor
+(`DetalleCredito`, `DetalleMora`, `PlanAmortizacion`), que con el perfil
+gerencia enlazan bajo `/gerencia/creditos/:id` y **no ofrecen «Registrar
+pago»** (además, el servidor rechaza un pago de gerencia). Migas: Inicio ›
+Cartera en mora › Crédito › Mora o Plan.
+
+### Asistente (decisión D1)
+
+`src/api/app.ts` no tiene ninguna ruta HTTP hacia el orquestador; hoy se
+usa por consola (`npm run chat`). El panel **lo informa**: no hay campo
+de texto ni botón de enviar, no se simulan respuestas y no se envía nada.
+Muestra cómo usar el asistente por consola en la demostración. En la web,
+un pago solo se registra en «Registro de pago», con vista previa y
+confirmación explícita del asesor.
+
+## Demostración
+
+1. En la raíz: `npm run api` (API sobre la cartera cargada). En `web/`:
+   `npm run dev` y abrir `http://localhost:5173`.
+2. **Gerencia** (escritorio): tablero al 31/10/2026 → clic en «Mora 2» de
+   la tabla → un crédito → «Detalle de la mora» y «Plan de amortización»
+   (sin botón de pago) → «Cierres»: diario y mensual de octubre (flujo
+   neto negativo) → cambiar el mes.
+3. **Asesor** (teléfono o vista angosta): inicio con próximos 7 días →
+   «Buscar cliente» `CV-2026-0043` → detalle → mora → «Registrar pago»:
+   vista previa con el desglose de la prelación. **Confirmar escribe en
+   la base**: hágalo solo si la base de la demostración lo permite.
+4. **Solicitud de crédito**: llegar hasta la revisión (simulación del
+   servidor, no guarda nada). Confirmar da de alta y desembolsa de verdad.
+5. Asistente: abrir el panel en gerencia (estado informativo) y, en otra
+   terminal, `npm run chat` (necesita `GEMINI_API_KEY`).
+
+Antes de confirmar un pago o un desembolso real, acuerde con el equipo
+qué base usa la API: puede ser la de Supabase compartida.
+
+## Limitaciones conocidas
+
+| Limitación | Motivo | Qué haría falta |
+|---|---|---|
+| El asistente no conversa desde la web | La API no expone el orquestador por HTTP | Rutas como `POST /api/asistente` y su aprobación (backend; no autorizado en la Fase 4) |
+| La gerencia no busca clientes | `GET /api/clientes` es solo para el asesor | Abrir la búsqueda a gerencia (backend). Hoy entra por el tablero y la cartera en mora |
+| Un alta o desembolso con respuesta perdida no se puede atribuir con certeza | La API no da identificador de operación ni DPI completo/teléfono/asesor en lecturas | Clave de idempotencia en `POST /api/clientes` y `POST /api/creditos` (backend). Mientras, flujo conservador (Fase 3) |
+| No hay pantallas para evaluar o aprobar solicitudes (R3, R4) | El backend no guarda solicitudes ni estados | Modelo de solicitud en el núcleo |
+| Cualquiera elige cualquier perfil | La autenticación quedó fuera del enunciado | Autenticación real; la API escucha solo en `127.0.0.1` |
+| La galería `/gerencia/componentes` tiene valores de ejemplo | Es solo para revisar el diseño | Nada: no existe en `npm run build` |
+
+## Resultados de pruebas (Fase 4)
+
+Verificación en el entorno de trabajo (Linux, 2 CPU):
+
+| Prueba | Resultado |
+|---|---|
+| Playwright, suite completa (`npm test` de `web/`) | **133 de 133** en tres corridas con la configuración final; antes de ampliar la espera a 10 s (es decir, con 5 s), también 133 de 133 con 4 trabajadores (tres corridas) y con 12 (dos corridas) |
+| Revisión de tipos de `web/` y de la raíz | sin errores |
+| Compilación de producción | correcta; la galería de desarrollo no se incluye |
+| Suite de la raíz | 614 de 615; la restante (`ejecutarEvaluaciones`) usa `vi.hoisted`, que el sustituto de Vitest del entorno no implementa |
+| Recorrido de gerencia contra la API real (datos CSV en memoria) | todas las respuestas 200, ninguna escritura |
+
+En ese entorno npm no puede instalar paquetes, así que `vite build`,
+`vite dev` y Vitest se reemplazaron por equivalentes (esbuild + Tailwind,
+un servidor estático y node:test con el `expect` real de Vitest). Las
+pruebas de Playwright corrieron contra esa compilación, no contra `npm
+run dev`. Para las fallas intermitentes vistas en Windows con la suite
+completa se agregaron `server.warmup` en `vite.config.ts` y una espera
+de 10 s por aserción en `playwright.config.ts` (sin reintentos y sin
+tocar ninguna aserción); conviene confirmarlo con `npm --prefix web test`.
 
 ## Estructura
 
@@ -265,6 +404,7 @@ web/
     │   ├── contratos.ts     tipos de respuesta, importados de src/ (import type)
     │   ├── cobro.ts         endpoints del cobro en campo y vencimientos
     │   ├── originacion.ts   asesores, alta, simulación y desembolso
+    │   ├── gerencia.ts      cartera, cartera en mora y cierres
     │   └── useConsulta.ts   carga / error / datos, con cancelación
     ├── cobro/               búsqueda, flujo de pago, vencimientos y reglas de la operación
     ├── originacion/         solicitud de crédito y reglas de la operación incierta
@@ -288,9 +428,10 @@ web/
 | Plan de amortización | `/asesor/creditos/:id/plan` | ✅ 3 |
 | Detalle de la mora | `/asesor/creditos/:id/mora?cuota=n` | ✅ 2 |
 | Próximos vencimientos (complemento, D1) | `/asesor` · `/asesor/vencimientos?dias=` | ✅ 3 |
-| Tablero gerencial | `/gerencia` · `/gerencia/mora/:tramo` | 4 |
-| Cierre diario / mensual | `/gerencia/cierre` | 4 |
-| Chat gerencial (E5) | panel lateral en todo el layout de gerencia | 5 |
+| Detalle de la mora y plan (gerencia, solo consulta) | `/gerencia/creditos/:id/mora` · `/plan` | ✅ 4 |
+| Tablero gerencial | `/gerencia` · `/gerencia/mora` · `/gerencia/mora/:tramo` | ✅ 4 |
+| Cierre diario / mensual | `/gerencia/cierre?tipo=diario\|mensual&periodo=AAAA-MM` | ✅ 4 |
+| Chat gerencial (E5) | panel lateral en todo el layout de gerencia | informativo (requiere backend) |
 
 En desarrollo existe además `/gerencia/componentes`: una galería para
 revisar el diseño. Sus valores son de ejemplo y la ruta **no existe** en
@@ -310,6 +451,8 @@ Diferencias deliberadas con el prototipo, para cumplir el enunciado:
   son "al 31 de octubre"; G-7 pide otra fecha).
 - El menú de gerencia muestra solo lo que existe (Inicio, Cartera en
   mora, Cierres, Asistente).
+- El tablero reemplaza los widgets del prototipo que el núcleo no
+  respalda por el desglose de la cartera en riesgo por categoría (D9).
 - Los tramos usan el nombre del núcleo (`Vencido`, no "Mora 4") con su
   explicación ("Mora 2 · lleva más de un mes de atraso").
 

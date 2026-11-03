@@ -9,12 +9,10 @@ import { PlanAmortizacion } from "../paginas/asesor/PlanAmortizacion";
 import { SolicitudCredito } from "../paginas/asesor/SolicitudCredito";
 import { Vencimientos } from "../paginas/asesor/Vencimientos";
 import { RegistroPago } from "../paginas/asesor/RegistroPago";
-import {
-    CarteraEnMora,
-    Cierre,
-    DetalleCreditoGerencia,
-    Tablero
-} from "../paginas/gerencia/PantallasGerencia";
+import { CarteraEnMora } from "../paginas/gerencia/CarteraEnMora";
+import { Cierre } from "../paginas/gerencia/Cierre";
+import { DetalleCreditoGerencia, MoraGerencia, PlanGerencia } from "../paginas/gerencia/DetalleGerencia";
+import { Tablero } from "../paginas/gerencia/Tablero";
 import { etiquetaTramo } from "../utilidades/etiquetas";
 import type { Parametros } from "./enrutador";
 
@@ -31,6 +29,7 @@ import type { Parametros } from "./enrutador";
  *   Registro de pago ............ /asesor/pagos
  *   Plan de amortización ........ /asesor/creditos/:id/plan
  *   Detalle de la mora .......... /asesor/creditos/:id/mora (y /gerencia/creditos/:id/mora)
+ *   (la gerencia también ve el plan: /gerencia/creditos/:id/plan; todo en solo lectura)
  *   Tablero gerencial ........... /gerencia  (+ /gerencia/mora/:tramo, G-4)
  *   Cierre diario / mensual ..... /gerencia/cierre
  */
@@ -123,7 +122,35 @@ const RUTAS_BASE: ReadonlyArray<DefinicionRuta> = [
         titulo: p => `Crédito ${p.id ?? ""}`,
         perfil: "gerencia", layout: "gerencia",
         pagina: () => <DetalleCreditoGerencia />,
-        migas: p => [{ etiqueta: "Inicio", a: "/gerencia" }, { etiqueta: `Crédito ${p.id ?? ""}` }]
+        migas: p => [
+            { etiqueta: "Inicio", a: "/gerencia" },
+            { etiqueta: "Cartera en mora", a: "/gerencia/mora" },
+            { etiqueta: `Crédito ${p.id ?? ""}` }
+        ]
+    },
+    {
+        patron: "/gerencia/creditos/:id/mora",
+        titulo: "Detalle de la mora",
+        perfil: "gerencia", layout: "gerencia",
+        pagina: () => <MoraGerencia />,
+        migas: p => [
+            { etiqueta: "Inicio", a: "/gerencia" },
+            { etiqueta: "Cartera en mora", a: "/gerencia/mora" },
+            { etiqueta: `Crédito ${p.id ?? ""}`, a: `/gerencia/creditos/${enc(p.id ?? "")}` },
+            { etiqueta: "Detalle de la mora" }
+        ]
+    },
+    {
+        patron: "/gerencia/creditos/:id/plan",
+        titulo: "Plan de amortización",
+        perfil: "gerencia", layout: "gerencia",
+        pagina: () => <PlanGerencia />,
+        migas: p => [
+            { etiqueta: "Inicio", a: "/gerencia" },
+            { etiqueta: "Cartera en mora", a: "/gerencia/mora" },
+            { etiqueta: `Crédito ${p.id ?? ""}`, a: `/gerencia/creditos/${enc(p.id ?? "")}` },
+            { etiqueta: "Plan de amortización" }
+        ]
     },
     {
         patron: "/gerencia/cierre",

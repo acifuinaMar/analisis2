@@ -1,7 +1,10 @@
 import type { Page, Route } from "@playwright/test";
 
 import type {
+    Cierre,
     CuerpoDesembolso,
+    EstadoCartera,
+    ListadoCreditosEnMora,
     DeudaCuota,
     DeudaExigible,
     EstadoCredito,
@@ -61,6 +64,10 @@ export interface OpcionesSimulacion {
     perderDesembolso?: "aplicando" | "sin_aplicar";
     /** Demora de las escrituras de la originación (para el doble clic). */
     retrasoEscrituraMs?: number;
+    /** Consultas de gerencia que responden 503 (Fase 4). */
+    gerenciaFalla?: ReadonlyArray<"cartera" | "mora" | "cierres">;
+    /** Demora de las consultas de gerencia (para ver el estado de carga). */
+    retrasoGerenciaMs?: number;
 }
 
 export interface Simulacion {
@@ -122,6 +129,108 @@ function planSimulado(capital: number, plazo: number, tna: number, fecha: string
         })),
         totales: { cuotas: 12055.45, intereses: 2055.45, capital }
     };
+}
+
+// ----------------------------------------------------------------------
+// Datos de PRUEBA de gerencia (cifras fijas, no calculadas)
+// ----------------------------------------------------------------------
+
+/** Fecha de corte con la que la cartera simulada está vacía. */
+export const FECHA_SIN_CARTERA = "2020-01-01";
+
+function carteraDe(fechaCorte: string): EstadoCartera {
+    if (fechaCorte === FECHA_SIN_CARTERA) {
+        return {
+            fechaCorte, creditosActivos: 0, carteraActiva: 0, carteraEnMora: 0, porcentajeEnMora: 0,
+            montoEnRiesgo: 0, porcentajeEnRiesgo: 0, dadoPorIncobrable: 0, candidatosAIncobrable: 0,
+            saldoCandidatosAIncobrable: 0,
+            desglosePorTramo: ["mora_1", "mora_2", "mora_3", "vencido", "reestructurado_al_dia"]
+                .map(categoria => ({ categoria, creditos: 0, saldo: 0, porcentaje: 0 }))
+        };
+    }
+    return {
+        fechaCorte,
+        creditosActivos: 66,
+        carteraActiva: 299939.82,
+        carteraEnMora: 48715.17,
+        porcentajeEnMora: 0.16241648074603765,
+        montoEnRiesgo: 37841.71,
+        porcentajeEnRiesgo: 0.12616434190031853,
+        dadoPorIncobrable: 0,
+        candidatosAIncobrable: 2,
+        saldoCandidatosAIncobrable: 2333.48,
+        desglosePorTramo: [
+            { categoria: "mora_1", creditos: 0, saldo: 0, porcentaje: 0 },
+            { categoria: "mora_2", creditos: 3, saldo: 7000, porcentaje: 0.02333801493913012 },
+            { categoria: "mora_3", creditos: 2, saldo: 1954.26, porcentaje: 0.0065155070107063475 },
+            { categoria: "vencido", creditos: 4, saldo: 6638.3, porcentaje: 0.02213210636720393 },
+            { categoria: "reestructurado_al_dia", creditos: 3, saldo: 22249.15, porcentaje: 0.07417871358327814 }
+        ]
+    };
+}
+
+function moraDe(fechaCorte: string, tramo: string | null): ListadoCreditosEnMora {
+    const todos = fechaCorte === FECHA_SIN_CARTERA ? [] : [
+        { idCredito: CREDITO_INCOBRABLE, idCliente: "CL-0015", nombreCliente: "Bruno Prueba Dos", diasAtraso: 130, tramo: "vencido", estado: "en_mora", reestructurado: false, saldoCapital: 1029.24, cuotasVencidas: 4 },
+        { idCredito: CREDITO_MORA, idCliente: "CL-0060", nombreCliente: "Ana Lucía Prueba Uno", diasAtraso: 45, tramo: "mora_2", estado: "en_mora", reestructurado: true, saldoCapital: 2000, cuotasVencidas: 2 }
+    ] as unknown as ListadoCreditosEnMora["creditos"];
+    const creditos = tramo ? todos.filter(k => k.tramo === tramo) : todos;
+    // Totales fijos por filtro, como los daría el servidor (no se suman aquí).
+    const saldo = creditos.length === 0 ? 0 : tramo === "vencido" ? 1029.24 : tramo === "mora_2" ? 2000 : 3029.24;
+    return {
+        fechaCorte,
+        tramoFiltrado: (tramo ?? null) as ListadoCreditosEnMora["tramoFiltrado"],
+        cantidad: creditos.length,
+        saldoCapitalTotal: saldo,
+        creditos
+    };
+}
+
+function cierreVacio(id: string, tipo: "diario" | "mensual", desde: string, hasta: string): Cierre {
+    return {
+        id, tipo, desde, hasta,
+        desembolsos: { cantidad: 0, monto: 0 },
+        pagos: { cantidad: 0, monto: 0 },
+        recuperaciones: { gastos: 0, interesMoratorio: 0, interesCorriente: 0, capital: 0, excedenteACapital: 0, total: 0 },
+        flujoNeto: 0
+    };
+}
+
+function cierreDiario(fecha: string): Cierre {
+    const base = cierreVacio(`CIE-${fecha}`, "diario", fecha, fecha);
+    if (fecha !== "2026-10-15") {
+        return base;
+    }
+    return {
+        ...base,
+        pagos: { cantidad: 1, monto: 520.4 },
+        recuperaciones: { gastos: 0, interesMoratorio: 0, interesCorriente: 40.4, capital: 480, excedenteACapital: 0, total: 520.4 },
+        flujoNeto: 520.4
+    };
+}
+
+function cierreMensual(periodo: string): Cierre {
+    const fin = periodo === "2026-09" ? "30" : "31";
+    const base = cierreVacio(`CIE-${periodo}`, "mensual", `${periodo}-01`, `${periodo}-${fin}`);
+    if (periodo === "2026-10") {
+        return {
+            ...base,
+            desembolsos: { cantidad: 10, monto: 41000 },
+            pagos: { cantidad: 42, monto: 36554.5 },
+            recuperaciones: { gastos: 0, interesMoratorio: 16.93, interesCorriente: 7162.89, capital: 29374.68, excedenteACapital: 0, total: 36554.5 },
+            flujoNeto: -4445.5
+        };
+    }
+    if (periodo === "2026-09") {
+        return {
+            ...base,
+            desembolsos: { cantidad: 1, monto: 3000 },
+            pagos: { cantidad: 30, monto: 15000 },
+            recuperaciones: { gastos: 25, interesMoratorio: 75, interesCorriente: 2900, capital: 11500, excedenteACapital: 500, total: 15000 },
+            flujoNeto: 12000
+        };
+    }
+    return base;
 }
 
 function normalizar(t: string) {
@@ -208,6 +317,56 @@ export async function simularApi(page: Page, opciones: OpcionesSimulacion = {}):
                 }))
             };
             return responder(ruta, 200, r);
+        }
+
+        // --- Consultas de gerencia (Fase 4) ---------------------------------
+        // Formas verificadas contra la API real (src/api/app.ts) sobre el
+        // paquete CSV. Las cifras son de PRUEBA y fijas: la interfaz debe
+        // mostrarlas tal cual, sin sumar ni recalcular.
+        const falla = (q: "cartera" | "mora" | "cierres") => opciones.gerenciaFalla?.includes(q) ?? false;
+        const esperarGerencia = () => opciones.retrasoGerenciaMs
+            ? new Promise(r => setTimeout(r, opciones.retrasoGerenciaMs))
+            : Promise.resolve();
+
+        if (p === "/api/cartera") {
+            if (perfil !== "gerencia") {
+                return error(ruta, 403, "PERFIL_SIN_PERMISO", `El perfil '${perfil}' no tiene permiso para esta operacion.`, { permitidos: ["gerencia"] });
+            }
+            await esperarGerencia();
+            if (falla("cartera")) {
+                return error(ruta, 503, "SIN_API", "Servicio no disponible (simulado).");
+            }
+            return responder(ruta, 200, carteraDe(fechaCorte));
+        }
+
+        if (p === "/api/cartera/mora") {
+            await esperarGerencia();
+            if (falla("mora")) {
+                return error(ruta, 503, "SIN_API", "Servicio no disponible (simulado).");
+            }
+            const tramo = url.searchParams.get("tramo");
+            if (tramo !== null && !["mora_1", "mora_2", "mora_3", "vencido"].includes(tramo)) {
+                return error(ruta, 400, "VALIDACION", "La peticion no cumple el contrato.", { campos: [{ campo: "tramo", mensaje: "Invalid enum value." }] });
+            }
+            return responder(ruta, 200, moraDe(fechaCorte, tramo));
+        }
+
+        if (p === "/api/cierres/diario" || p === "/api/cierres/mensual") {
+            if (perfil !== "gerencia") {
+                return error(ruta, 403, "PERFIL_SIN_PERMISO", `El perfil '${perfil}' no tiene permiso para esta operacion.`, { permitidos: ["gerencia"] });
+            }
+            await esperarGerencia();
+            if (falla("cierres")) {
+                return error(ruta, 503, "SIN_API", "Servicio no disponible (simulado).");
+            }
+            if (p === "/api/cierres/diario") {
+                return responder(ruta, 200, cierreDiario(fechaCorte));
+            }
+            const periodo = url.searchParams.get("periodo") ?? "";
+            if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodo)) {
+                return error(ruta, 400, "VALIDACION", "La peticion no cumple el contrato.", { campos: [{ campo: "periodo", mensaje: "El periodo debe venir en formato AAAA-MM." }] });
+            }
+            return responder(ruta, 200, cierreMensual(periodo));
         }
 
         // --- Próximos vencimientos (ambos perfiles) -------------------------

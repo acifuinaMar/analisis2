@@ -17,6 +17,12 @@ export default defineConfig({
     testMatch: "**/*.prueba.ts",
     fullyParallel: true,
     reporter: [["list"]],
+    // 10 s en vez de los 5 s por omisión: con `npm run dev`, Vite compila
+    // bajo demanda y en Windows, con varios trabajadores, la primera carga
+    // puede tardar más. No cambia NINGUNA aserción: solo cuánto se espera
+    // a que se cumpla. Sin reintentos automáticos (retries: 0).
+    expect: { timeout: 10_000 },
+    retries: 0,
     use: {
         baseURL: `http://127.0.0.1:${PUERTO}`,
         locale: "es-GT",

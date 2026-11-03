@@ -76,3 +76,22 @@ export function rotuloCuotas(numeros: ReadonlyArray<number>, mayuscula = true): 
 export function etiquetaCuotasQueCubre(cantidad: number): string {
     return cantidad === 1 ? "Cuota que cubre" : "Cuotas que cubre";
 }
+
+/**
+ * Categorías del desglose de la cartera en riesgo (CategoriaRiesgo,
+ * src/servicios/cartera.ts): los cuatro tramos de mora más el crédito
+ * reestructurado que está al día. Solo se les pone nombre.
+ */
+export function etiquetaCategoriaRiesgo(codigo: string): string {
+    return codigo === "reestructurado_al_dia" ? "Reestructurado al día" : etiquetaTramo(codigo);
+}
+
+/** "1 crédito" / "3 créditos". */
+export function cantidadCreditos(n: number): string {
+    return `${n} ${n === 1 ? "crédito" : "créditos"}`;
+}
+
+/** "1 cuota vencida" / "2 cuotas vencidas". */
+export function cantidadCuotasVencidas(n: number): string {
+    return `${n} ${n === 1 ? "cuota vencida" : "cuotas vencidas"}`;
+}

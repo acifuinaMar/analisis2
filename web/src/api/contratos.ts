@@ -8,8 +8,14 @@
  * src/api/app.ts.
  */
 export type {
+    Cierre,
+    CreditoEnMora,
     CuotaResumen,
     DesglosePrelacion,
+    EstadoCartera,
+    FilaRiesgo,
+    ListadoCreditosEnMora,
+    RecuperacionesPorConcepto,
     DeudaCuota,
     EstadoCredito,
     ExplicacionMora,

@@ -22,7 +22,7 @@ import {
     Tarjeta,
     TituloSeccion
 } from "../../ui";
-import { etiquetaTramoConExplicacion } from "../../utilidades/etiquetas";
+import { cantidadCuotasVencidas, etiquetaTramoConExplicacion } from "../../utilidades/etiquetas";
 import { formatoFecha, formatoFechaLarga, formatoPorcentaje, formatoQuetzales } from "../../utilidades/formato";
 
 /**
@@ -30,6 +30,19 @@ import { formatoFecha, formatoFechaLarga, formatoPorcentaje, formatoQuetzales } 
  * de la mora. Cada cifra que aparece aquí viene de la API, consultada con
  * la fecha de corte del encabezado; la interfaz solo la formatea.
  */
+
+/**
+ * Las pantallas del crédito sirven a los dos perfiles (Fase 4, D2): la
+ * gerencia las ve bajo /gerencia y en SOLO LECTURA, sin «Registrar pago».
+ * El servidor rechaza igual un pago de gerencia; esto solo evita ofrecerlo.
+ */
+export function usePerfilCredito() {
+    const { perfil } = useSesion();
+    return {
+        base: perfil === "gerencia" ? "/gerencia" : "/asesor",
+        puedeCobrar: perfil === "asesor"
+    };
+}
 
 // ----------------------------------------------------------------------
 // Buscar cliente
@@ -57,6 +70,7 @@ const ESTADO_CUOTA: Record<FilaPlanCredito["estado"], { etiqueta: string; varian
 export function DetalleCredito() {
     const { id = "" } = useParametros();
     const { api, fechaCorte } = useSesion();
+    const { base, puedeCobrar } = usePerfilCredito();
 
     const credito = useConsulta(s => obtenerCredito(api, id, fechaCorte, s), [id, fechaCorte]);
     const plan = useConsulta(s => obtenerPlan(api, id, fechaCorte, s), [id, fechaCorte]);
@@ -127,7 +141,7 @@ export function DetalleCredito() {
                         etiqueta="Atraso"
                         valor={`${c.diasAtraso} días`}
                         enfasis={c.diasAtraso > 0 ? "peligro" : undefined}
-                        detalle={`${c.cuotasVencidas} cuota(s) vencida(s)`}
+                        detalle={cantidadCuotasVencidas(c.cuotasVencidas)}
                     />
                 </div>
                 <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-texto-medio">
@@ -158,12 +172,15 @@ export function DetalleCredito() {
                 ) : null}
             </section>
 
+            {!puedeCobrar ? (
+                <p className="text-sm text-texto-suave">Perfil gerencia: solo consulta. Los pagos los registra un asesor de campo.</p>
+            ) : null}
             <div className="flex flex-col gap-2 sm:flex-row">
-                <BotonEnlace a={`/asesor/pagos?credito=${ruta}`} icono="tarjeta" bloque>Registrar pago</BotonEnlace>
+                {puedeCobrar ? <BotonEnlace a={`/asesor/pagos?credito=${ruta}`} icono="tarjeta" bloque>Registrar pago</BotonEnlace> : null}
                 {hayDeuda ? (
-                    <BotonEnlace a={`/asesor/creditos/${ruta}/mora`} variante="secundario" bloque>Detalle de la mora</BotonEnlace>
+                    <BotonEnlace a={`${base}/creditos/${ruta}/mora`} variante="secundario" bloque>Detalle de la mora</BotonEnlace>
                 ) : null}
-                <BotonEnlace a={`/asesor/creditos/${ruta}/plan`} variante="secundario" bloque>Plan de amortización</BotonEnlace>
+                <BotonEnlace a={`${base}/creditos/${ruta}/plan`} variante="secundario" bloque>Plan de amortización</BotonEnlace>
             </div>
 
             <section>
@@ -209,6 +226,7 @@ export function DetalleMora() {
     const { consulta } = useUbicacion();
     const navegar = useNavegar();
     const { api, fechaCorte } = useSesion();
+    const { base, puedeCobrar } = usePerfilCredito();
 
     const deuda = useConsulta(s => obtenerDeuda(api, id, fechaCorte, s), [id, fechaCorte]);
     const exigibles = deuda.datos?.cuotasExigibles ?? [];
@@ -234,7 +252,7 @@ export function DetalleMora() {
         return (
             <div>
                 <EncabezadoPagina titulo="Detalle de la mora" subtitulo={`Crédito ${id} al ${formatoFechaLarga(fechaCorte)}.`} />
-                <EstadoVacio icono="exito" titulo="Sin mora" accion={<BotonEnlace a={`/asesor/creditos/${ruta}`} variante="secundario">Volver al crédito</BotonEnlace>}>
+                <EstadoVacio icono="exito" titulo="Sin mora" accion={<BotonEnlace a={`${base}/creditos/${ruta}`} variante="secundario">Volver al crédito</BotonEnlace>}>
                     El crédito no tiene cuotas vencidas a esta fecha de corte.
                 </EstadoVacio>
             </div>
@@ -255,7 +273,7 @@ export function DetalleMora() {
                             key={n}
                             type="button"
                             aria-pressed={n === cuota}
-                            onClick={() => navegar(`/asesor/creditos/${ruta}/mora?cuota=${n}`, { reemplazar: true })}
+                            onClick={() => navegar(`${base}/creditos/${ruta}/mora?cuota=${n}`, { reemplazar: true })}
                             className={n === cuota
                                 ? "h-9 rounded-lg bg-marca px-3 text-sm font-semibold text-white"
                                 : "h-9 rounded-lg border border-borde-fuerte bg-superficie px-3 text-sm text-texto-medio hover:bg-superficie-activa"}
@@ -343,8 +361,8 @@ export function DetalleMora() {
             ) : deudaCuota.error ? <AvisoError error={deudaCuota.error} alReintentar={deudaCuota.recargar} /> : null}
 
             <div className="flex flex-col gap-2 sm:flex-row">
-                <BotonEnlace a={`/asesor/pagos?credito=${ruta}`} icono="tarjeta" bloque>Registrar pago</BotonEnlace>
-                <BotonEnlace a={`/asesor/creditos/${ruta}`} variante="secundario" bloque>Volver al detalle del crédito</BotonEnlace>
+                {puedeCobrar ? <BotonEnlace a={`/asesor/pagos?credito=${ruta}`} icono="tarjeta" bloque>Registrar pago</BotonEnlace> : null}
+                <BotonEnlace a={`${base}/creditos/${ruta}`} variante="secundario" bloque>Volver al detalle del crédito</BotonEnlace>
             </div>
         </div>
     );

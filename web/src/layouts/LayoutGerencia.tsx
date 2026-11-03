@@ -30,8 +30,9 @@ interface ItemMenu {
 }
 
 const MENU: ReadonlyArray<ItemMenu> = [
-    { a: "/gerencia", etiqueta: "Inicio", icono: "inicio", exacta: true, tambien: ["/gerencia/creditos"] },
-    { a: "/gerencia/mora", etiqueta: "Cartera en mora", icono: "alerta" },
+    { a: "/gerencia", etiqueta: "Inicio", icono: "inicio", exacta: true },
+    // El detalle de un crédito se abre desde la cartera en mora (o el tablero).
+    { a: "/gerencia/mora", etiqueta: "Cartera en mora", icono: "alerta", tambien: ["/gerencia/creditos"] },
     { a: "/gerencia/cierre", etiqueta: "Cierres", icono: "cierre" }
 ];
 

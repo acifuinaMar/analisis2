@@ -21,7 +21,15 @@ export default defineConfig(({ mode }) => {
 
     return {
         plugins: [react(), tailwindcss()],
-        server: { port: 5173, proxy },
+        server: {
+            port: 5173,
+            proxy,
+            // Precompila la aplicación al arrancar: sin esto, la primera
+            // página de cada prueba de Playwright espera a que Vite
+            // transforme módulos bajo demanda y, con varios trabajadores en
+            // paralelo, alguna espera puede agotar su tiempo.
+            warmup: { clientFiles: ["./src/main.tsx"] }
+        },
         preview: { port: 4173, proxy }
     };
 });

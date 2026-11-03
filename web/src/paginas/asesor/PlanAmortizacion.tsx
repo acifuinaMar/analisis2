@@ -3,6 +3,7 @@ import { useConsulta } from "../../api/useConsulta";
 import { useParametros } from "../../app/enrutador";
 import { useSesion } from "../../estado/sesion";
 import { TablaPlan } from "../../plan/TablaPlan";
+import { usePerfilCredito } from "./CobroEnCampo";
 import {
     AvisoError,
     BotonEnlace,
@@ -31,6 +32,7 @@ import { formatoFecha, formatoFechaLarga, formatoPorcentaje, formatoQuetzales } 
 export function PlanAmortizacion() {
     const { id = "" } = useParametros();
     const { api, fechaCorte } = useSesion();
+    const { base, puedeCobrar } = usePerfilCredito();
 
     const plan = useConsulta(s => obtenerPlan(api, id, fechaCorte, s), [id, fechaCorte]);
     const credito = useConsulta(s => obtenerCredito(api, id, fechaCorte, s), [id, fechaCorte]);
@@ -84,8 +86,8 @@ export function PlanAmortizacion() {
             </p>
 
             <div className="flex flex-col gap-2 sm:flex-row">
-                <BotonEnlace a={`/asesor/creditos/${ruta}`} variante="secundario" bloque>Volver al detalle del crédito</BotonEnlace>
-                <BotonEnlace a={`/asesor/pagos?credito=${ruta}`} icono="tarjeta" bloque>Registrar pago</BotonEnlace>
+                <BotonEnlace a={`${base}/creditos/${ruta}`} variante="secundario" bloque>Volver al detalle del crédito</BotonEnlace>
+                {puedeCobrar ? <BotonEnlace a={`/asesor/pagos?credito=${ruta}`} icono="tarjeta" bloque>Registrar pago</BotonEnlace> : null}
             </div>
         </div>
     );
