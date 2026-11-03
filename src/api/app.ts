@@ -15,6 +15,7 @@ import {
 } from "../mcp/esquemas";
 import { CobroCredito } from "../servicios/cobro-credito";
 import { ConsultasCartera } from "../servicios/consultas-cartera";
+import { DirectorioClientes } from "../servicios/directorio-clientes";
 import { OriginacionCredito } from "../servicios/originacion-credito";
 import { aCuerpoError, ErrorHttp } from "./errores";
 import { exigirPerfil } from "./perfiles";
@@ -89,6 +90,11 @@ const PagoCuerpoEsquema = RegistrarPagoEntrada.omit({ idCredito: true }).strict(
 
 const FechaCorteQuery = z.object({ fechaCorte: FechaCorteEsquema });
 
+/** Texto de busqueda de clientes: nombre, CL-NNNN, DPI o CV-AAAA-NNNN. */
+const BusquedaClientesQuery = z.object({
+    buscar: z.string().trim().min(2, "Escriba al menos 2 caracteres.").max(60)
+});
+
 function validar<T extends z.ZodTypeAny>(esquema: T, datos: unknown): z.infer<T> {
 
     const r = esquema.safeParse(datos);
@@ -126,6 +132,7 @@ export function crearApp(opciones: OpcionesApp): Express {
     const consultas = new ConsultasCartera(opciones.repositorio);
     const originacion = new OriginacionCredito(opciones.repositorio);
     const cobro = new CobroCredito(opciones.repositorio);
+    const directorio = new DirectorioClientes(opciones.repositorio);
 
     const app = express();
 
@@ -152,6 +159,16 @@ export function crearApp(opciones: OpcionesApp): Express {
 
     app.get("/api/asesores", soloAsesor, async (_req, res) => {
         res.json({ asesores: await opciones.repositorio.listarAsesores() });
+    });
+
+    // Busqueda para el cobro en campo. Solo lectura, sin cifras: el estado
+    // de cada credito se pide aparte a GET /api/creditos/:id. Del DPI solo
+    // viajan los cuatro ultimos caracteres.
+    app.get("/api/clientes", soloAsesor, async (req, res) => {
+
+        const q = validar(BusquedaClientesQuery, req.query);
+
+        res.json(await directorio.buscar(q.buscar));
     });
 
     app.post("/api/clientes", soloAsesor, async (req, res) => {

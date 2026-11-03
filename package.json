@@ -18,6 +18,7 @@
     "api": "node --env-file=.env --import tsx src/api/iniciar.ts",
     "mcp:servidor": "node --env-file=.env --import tsx src/mcp/servidor.ts",
     "chat": "node --env-file=.env --import tsx src/asistente/chat.ts",
+    "chat:diagnostico": "node --env-file=.env --import tsx src/asistente/diagnosticar-gemini.ts",
     "evals:asistente": "node --env-file=.env --import tsx src/asistente/evaluar.ts",
     "rag:indexar": "node --env-file=.env --import tsx src/rag/indexarCorpus.ts"
   },

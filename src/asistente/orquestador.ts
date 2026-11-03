@@ -69,6 +69,28 @@ const MAX_RONDAS = 6;
  * 403 de la API. Una negativa que redactara el modelo se podria matizar
  * -- "podria aplicarlo si..." --; una excepcion no se matiza.
  */
+/**
+ * El pago aprobado ya se envio al nucleo, pero el modelo fallo al
+ * redactar la respuesta. Lleva el resultado tal como lo devolvio la
+ * herramienta, para mostrarlo sin depender del modelo.
+ */
+export class ErrorTrasAplicarPago extends Error {
+
+    constructor(
+        public readonly idCredito: string,
+        /** JSON que devolvio registrar_pago. */
+        public readonly resultado: string,
+        causa: unknown
+    ) {
+        super(
+            `El pago del credito ${idCredito} ya se proceso, pero el modelo `
+            + `no pudo redactar la respuesta.`,
+            { cause: causa }
+        );
+        this.name = "ErrorTrasAplicarPago";
+    }
+}
+
 export class ErrorPerfilSinPermiso extends Error {
 
     public readonly codigo = "PERFIL_SIN_PERMISO";
@@ -190,9 +212,29 @@ export class Orquestador {
             throw new Error("La pregunta no puede estar vacia.");
         }
 
+        // Cada pregunta es ATOMICA: si el modelo falla a mitad de camino
+        // (Gemini saturado, sin respuesta a tiempo), el historial vuelve a
+        // como estaba antes de preguntar. Asi no queda un turno a medias
+        // —una pregunta sin respuesta, una consulta sin cierre— que
+        // confunda al modelo en la siguiente, y no hace falta borrar la
+        // conversacion entera para seguir.
+        //
+        // Es seguro deshacerlo porque en una pregunta solo corren
+        // herramientas de CONSULTA y la vista previa del pago, que no
+        // escribe nada. El pago real se aplica en aprobarPago, que no se
+        // deshace (ver alli).
+        const marca = this.mensajes.length;
+        const pendienteAntes = this.pendiente;
+
         this.mensajes.push({ papel: "usuario", texto });
 
-        return this.avanzar();
+        try {
+            return await this.avanzar();
+        } catch (error) {
+            this.mensajes.length = marca;
+            this.pendiente = pendienteAntes;
+            throw error;
+        }
     }
 
     /**
@@ -243,7 +285,15 @@ export class Orquestador {
             contenido: resultado
         });
 
-        return this.avanzar([HERRAMIENTA_PAGO]);
+        // Aqui el pago YA paso por el nucleo. Si el modelo falla al
+        // redactar la explicacion, el resultado queda en el historial (no
+        // se deshace, porque el pago no se deshace) y el error dice que el
+        // pago se proceso: quien llama no debe ofrecer aprobarlo de nuevo.
+        try {
+            return await this.avanzar([HERRAMIENTA_PAGO]);
+        } catch (error) {
+            throw new ErrorTrasAplicarPago(propuesta.idCredito, resultado, error);
+        }
     }
 
     /** Rechaza el pago propuesto. No se aplica nada. */

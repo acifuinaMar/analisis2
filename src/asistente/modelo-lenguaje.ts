@@ -39,19 +39,13 @@ export interface LlamadaHerramienta {
     readonly argumentos: Record<string, unknown>;
 
     /**
-     * Dato OPACO del proveedor, atado a esta llamada.
-     *
-     * El orquestador no lo lee ni lo interpreta: solo lo guarda y lo
-     * devuelve tal cual en la ronda siguiente. Existe porque algunos
-     * proveedores firman la llamada que emitieron y exigen la firma de
-     * vuelta para continuar la conversacion; Gemini 3 lo hace, y sin
-     * ella rechaza la peticion y el chat se corta en la segunda
-     * herramienta.
-     *
-     * Es opaco a proposito: el puerto no se entera de que la firma
-     * significa, asi que no queda amarrado al formato de nadie.
+     * Dato OPACO del proveedor que acompana a la llamada y hay que
+     * devolverle tal cual en el historial. En Gemini 3 es la "thought
+     * signature": si la llamada vuelve sin ella, el modelo rechaza la
+     * peticion (400 INVALID_ARGUMENT). Nadie fuera del adaptador la lee
+     * ni la modifica.
      */
-    readonly firmaProveedor?: string;
+    readonly firma?: string;
 
 }
 
@@ -95,6 +89,52 @@ export interface ModeloLenguaje {
         herramientas: ReadonlyArray<DeclaracionHerramienta>
     ): Promise<TurnoModelo>;
 
+}
+
+/**
+ * Por que el modelo no pudo responder, en el vocabulario del chat y no en
+ * el del proveedor. El adaptador traduce los errores de su SDK a estos
+ * motivos; el chat decide que decirle a la persona sin conocer a Gemini.
+ *
+ *   saturado            el servicio esta sobrecargado (503, 500, 502),
+ *                       incluso despues de reintentar
+ *   tiempo_agotado      no respondio a tiempo (504 o el limite local)
+ *   cuota               se agoto la cuota de la clave (429)
+ *   credencial          la clave no es valida o no tiene permiso
+ *   modelo_inexistente  el modelo configurado no existe para esta clave
+ *   red                 no hubo conexion con el proveedor
+ *   cancelado           la persona cancelo (Ctrl+C) o se cerro el chat
+ *   rechazo             el proveedor rechazo la peticion por otro motivo
+ */
+export type MotivoErrorModelo =
+    | "saturado"
+    | "tiempo_agotado"
+    | "cuota"
+    | "credencial"
+    | "modelo_inexistente"
+    | "red"
+    | "cancelado"
+    | "rechazo";
+
+export class ErrorModeloLenguaje extends Error {
+
+    constructor(
+        public readonly motivo: MotivoErrorModelo,
+        mensaje: string,
+        /** Codigo HTTP del proveedor, si lo hubo. */
+        public readonly estadoHttp?: number,
+        options?: { cause?: unknown }
+    ) {
+        super(mensaje, options);
+        this.name = "ErrorModeloLenguaje";
+    }
+
+    /** Si tiene sentido que la persona vuelva a intentar en un momento. */
+    public esTemporal(): boolean {
+        return this.motivo === "saturado"
+            || this.motivo === "tiempo_agotado"
+            || this.motivo === "red";
+    }
 }
 
 /**

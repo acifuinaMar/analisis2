@@ -1,0 +1,30 @@
+{
+  "name": "credito-vecino-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Crédito Vecino · interfaz React del E1. Consume la API REST de src/api; no calcula cifras.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "tipos": "tsc --noEmit -p tsconfig.json",
+    "test": "playwright test",
+    "test:instalar-navegador": "playwright install chromium"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@tailwindcss/vite": "^4.1.8",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "@vitejs/plugin-react": "^4.5.0",
+    "tailwindcss": "^4.1.8",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  }
+}

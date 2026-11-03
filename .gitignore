@@ -52,3 +52,7 @@ Thumbs.db
 # Base de datos local (PGlite)
 # ==========================
 .cv-db/
+
+# Resultados de Playwright
+test-results/
+playwright-report/

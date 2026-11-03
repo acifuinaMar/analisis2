@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+/*
+ * Tokens del prototipo de alta fidelidad (Figma, docs/proyecto2/E5/img).
+ * Los colores se midieron sobre dashboard-gerencial-pc.png y
+ * detalle-de-la-mora.png; son la paleta "slate" de Tailwind más el azul
+ * marino de la marca. Se nombran por su PAPEL, no por su tono, para que
+ * un cambio de marca toque solo este bloque.
+ */
+@theme {
+    --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    /* Marca */
+    --color-marca: #1e3a8a;          /* botones primarios, logo, serie principal */
+    --color-marca-hover: #1e40af;
+    --color-marca-suave: #eff6ff;    /* fondo de íconos y avisos informativos */
+
+    /* Superficies */
+    --color-fondo: #f8fafc;          /* fondo de página */
+    --color-superficie: #ffffff;     /* tarjetas, barra lateral, encabezados */
+    --color-superficie-activa: #f1f5f9; /* ítem activo del menú, encabezado de tabla */
+    --color-borde: #e2e8f0;
+    --color-borde-fuerte: #cbd5e1;
+
+    /* Texto */
+    --color-texto: #0f172a;
+    --color-texto-medio: #334155;
+    --color-texto-suave: #64748b;
+
+    /* Semánticos: estado del crédito y avisos */
+    --color-peligro: #dc2626;        /* mora, rechazos */
+    --color-peligro-suave: #fee2e2;
+    --color-alerta: #b45309;         /* texto sobre ámbar (contraste AA) */
+    --color-alerta-acento: #f59e0b;
+    --color-alerta-suave: #fef3c7;
+    --color-exito: #16a34a;
+    --color-exito-suave: #dcfce7;
+    --color-info: #2563eb;
+    --color-info-suave: #eff6ff;
+
+    /* Gráficas: serie principal y secundaria del prototipo */
+    --color-serie-1: #1e3a8a;
+    --color-serie-2: #94a3b8;
+    --color-serie-3: #f59e0b;
+    --color-serie-4: #dc2626;
+
+    --radius-tarjeta: 0.75rem;
+    --shadow-tarjeta: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+}
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        @apply bg-fondo font-sans text-texto antialiased;
+        font-feature-settings: "tnum" 1, "cv11" 1;
+    }
+
+    /* Cifras alineadas en columnas: todas las tablas de montos. */
+    .cifra {
+        font-variant-numeric: tabular-nums;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-marca);
+        outline-offset: 2px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
