@@ -1,7 +1,9 @@
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+    afterAll, afterEach, beforeAll, beforeEach, describe, expect, it
+} from "vitest";
 
 import {
     LIMITE_RESPUESTA_MS,
@@ -52,7 +54,27 @@ let guion: Respuesta[] = [];
 let recibidas: IncomingHttpHeaders[] = [];
 let baseAnterior: string | undefined;
 
-beforeAll(async () => {
+/**
+ * UN SERVIDOR POR PRUEBA, en un puerto nuevo cada vez.
+ *
+ * Compartir un servidor entre las pruebas de este archivo las volvia
+ * inestables, y de la forma mas enganosa: una prueba que aborta o que
+ * reintenta deja peticiones en vuelo, y esas rezagadas aterrizaban en
+ * el `recibidas` de la prueba SIGUIENTE, que entonces fallaba por algo
+ * que no hizo. Cerrar las conexiones no alcanzaba, porque una peticion
+ * ya encolada llega igual.
+ *
+ * Con un puerto nuevo por prueba el problema desaparece por
+ * construccion: la rezagada no tiene a donde llegar. Levantar y cerrar
+ * un servidor local cuesta milisegundos.
+ *
+ * Importa porque el enunciado pide que `npm test` pase EN CAMARA
+ * durante el video, y estas fallaban solo cuando la maquina estaba
+ * cargada —grabando, por ejemplo—.
+ */
+beforeEach(async () => {
+    guion = [];
+    recibidas = [];
     servidor = createServer((req, res) => {
         req.resume();
         req.on("end", () => {
@@ -68,20 +90,22 @@ beforeAll(async () => {
         });
     });
     await new Promise<void>((ok) => servidor.listen(0, "127.0.0.1", ok));
-    baseAnterior = process.env.GOOGLE_GEMINI_BASE_URL;
-    process.env.GOOGLE_GEMINI_BASE_URL = `http://127.0.0.1:${(servidor.address() as AddressInfo).port}`;
+    process.env.GOOGLE_GEMINI_BASE_URL =
+        `http://127.0.0.1:${(servidor.address() as AddressInfo).port}`;
 });
 
-afterAll(async () => {
-    if (baseAnterior === undefined) delete process.env.GOOGLE_GEMINI_BASE_URL;
-    else process.env.GOOGLE_GEMINI_BASE_URL = baseAnterior;
+afterEach(async () => {
     servidor.closeAllConnections();
     await new Promise<void>((ok) => servidor.close(() => ok()));
 });
 
-afterEach(() => {
-    guion = [];
-    recibidas = [];
+beforeAll(() => {
+    baseAnterior = process.env.GOOGLE_GEMINI_BASE_URL;
+});
+
+afterAll(() => {
+    if (baseAnterior === undefined) delete process.env.GOOGLE_GEMINI_BASE_URL;
+    else process.env.GOOGLE_GEMINI_BASE_URL = baseAnterior;
 });
 
 function modelo(opciones: ConstructorParameters<typeof ModeloGemini>[2] = {}) {
@@ -189,14 +213,19 @@ describe("Adaptador Gemini - fallas temporales", () => {
     });
 
     it("Cancelar la sesion corta la consulta en curso: 'cancelado', sin reintentar", async () => {
-        guion = [{ ...OK, demoraMs: 2_000 }];
+        // El servidor demora diez segundos y se corta a los cien
+        // milisegundos. El margen lo da la DISTANCIA entre las dos
+        // cifras y no una tolerancia apretada: con la demora en dos
+        // segundos y el limite en uno y medio, la prueba fallaba bajo
+        // carga aunque el aborto hubiera funcionado bien.
+        guion = [{ ...OK, demoraMs: 10_000 }];
         const sesion = new AbortController();
         setTimeout(() => sesion.abort(), 100);
         const inicio = Date.now();
         const e = await fallaCon(modelo({ senal: sesion.signal }).responder("instrucciones", PREGUNTA, CATALOGO));
 
         expect(e.motivo).toBe("cancelado");
-        expect(Date.now() - inicio).toBeLessThan(1_500);
+        expect(Date.now() - inicio).toBeLessThan(2_000);
         expect(recibidas).toHaveLength(1);
     });
 
