@@ -233,6 +233,30 @@ async function evaluarCaso(
     };
 }
 
+/**
+ * Con que perfil se abre el chat de un caso.
+ *
+ * Se DERIVA de la categoria en vez de escribirse caso por caso, porque
+ * escribirlo a mano ya se olvido una vez: los tres casos de operacion
+ * corrian como gerencia, el asistente obedecia correctamente la regla
+ * de que gerencia no registra pagos, y la evaluacion lo contaba como
+ * falla del asistente cuando la falla era del conjunto de casos.
+ *
+ * El reparto no es arbitrario, lo fija el enunciado: las operaciones
+ * del Anexo A se hacen en la pantalla de Registro de pago, que es del
+ * ASESOR, y las consultas del Anexo B en el tablero, que es de
+ * GERENCIA. Un caso puede declarar `perfil` para contradecir esto
+ * cuando lo que se mide es justamente el perfil.
+ */
+export function perfilDelCaso(caso: CasoAsistente): Perfil {
+
+    if (caso.perfil !== undefined) {
+        return caso.perfil;
+    }
+
+    return caso.categoria === "operacion" ? "asesor" : "gerencia";
+}
+
 export async function evaluarAsistente(
     crearChat: (perfil: Perfil) => Promise<Orquestador>,
     opciones: {
@@ -249,7 +273,7 @@ export async function evaluarAsistente(
 
         const resultado = await evaluarCaso(
             caso,
-            await crearChat(caso.perfil ?? "gerencia")
+            await crearChat(perfilDelCaso(caso))
         );
 
         resultados.push(resultado);

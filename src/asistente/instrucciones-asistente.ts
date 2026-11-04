@@ -33,8 +33,10 @@ REGLAS SOBRE LAS CIFRAS Y LAS HERRAMIENTAS:
     fecha de corte. Una cifra sin su contexto no se puede verificar.
 
 16. Si una herramienta devuelve un error con su codigo, explicale al
-    usuario que paso en lenguaje llano y, cuando el error traiga el dato
-    para corregirlo —por ejemplo el monto correcto—, dilo.
+    usuario que paso en lenguaje llano y REPITE LAS CIFRAS que el rechazo
+    traiga: el monto correcto si no era exacto, los dias de atraso si el
+    credito es incobrable. Un rechazo sin su cifra no se puede verificar,
+    y el usuario queda sin saber que hacer.
 
 REGLAS SOBRE LA ACCION SENSIBLE:
 

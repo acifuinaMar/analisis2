@@ -19,7 +19,8 @@ import {
     contieneCifra,
     evaluarAsistente,
     informeEnTexto,
-    normalizarCifras
+    normalizarCifras,
+    perfilDelCaso
 } from "../../src/asistente/evaluar-asistente";
 import { ModeloGuionizado, dice, llama } from "../ayudas/modelo-guionizado";
 
@@ -548,4 +549,74 @@ describe("Corredor de la evaluacion", () => {
         expect(texto).toContain("G-1");
         expect(texto).toContain("1 de 1 casos aprobados");
     });
+});
+
+
+/**
+ * El perfil con el que corre cada caso.
+ *
+ * Los tres casos de operacion corrieron una vez como gerencia. El
+ * asistente obedecio correctamente la regla de que gerencia no
+ * registra pagos, y la evaluacion lo conto como falla del asistente
+ * cuando la falla era del conjunto de casos. Por eso el perfil se
+ * deriva de la categoria en vez de escribirse caso por caso, y por eso
+ * esto se prueba.
+ */
+describe("El perfil con el que corre cada caso", () => {
+
+    it("Las operaciones son del asesor, que es quien cobra", () => {
+
+        const operaciones = CASOS_ASISTENTE
+            .filter((c) => c.categoria === "operacion");
+
+        expect(operaciones.length).toBeGreaterThan(0);
+
+        for (const caso of operaciones) {
+            expect(perfilDelCaso(caso)).toBe("asesor");
+        }
+    });
+
+    it("Las siete consultas del Anexo B son de gerencia", () => {
+
+        const consultas = CASOS_ASISTENTE
+            .filter((c) => c.categoria === "consulta");
+
+        expect(consultas.length).toBe(7);
+
+        for (const caso of consultas) {
+            expect(perfilDelCaso(caso)).toBe("gerencia");
+        }
+    });
+
+    /**
+     * Todo caso que exija detenerse a pedir aprobacion tiene que correr
+     * con un perfil que PUEDA aprobar. Si no, el caso se contradice a
+     * si mismo: mide una aprobacion que el perfil tiene prohibida.
+     */
+    it("Quien debe aprobar puede aprobar", () => {
+
+        const conAprobacion = CASOS_ASISTENTE
+            .filter((c) => c.requiereAprobacion === true);
+
+        expect(conAprobacion.length).toBeGreaterThan(0);
+
+        for (const caso of conAprobacion) {
+            expect(perfilDelCaso(caso)).toBe("asesor");
+        }
+    });
+
+    it("Un caso puede declarar su perfil y manda sobre la categoria",
+        () => {
+
+            expect(perfilDelCaso({
+                id: "X",
+                categoria: "operacion",
+                pregunta: "p",
+                herramientasEsperadas: [],
+                cifrasEsperadas: [],
+                prohibido: [],
+                porQue: "p",
+                perfil: "gerencia"
+            })).toBe("gerencia");
+        });
 });
