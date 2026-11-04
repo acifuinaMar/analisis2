@@ -4,6 +4,7 @@ import { INSTRUCCIONES_RAG } from "./instruccionesRAG";
 import { evaluarRespuesta } from "./evaluarRespuesta";
 import { MODELO_GENERATIVO } from "./modeloGenerativo";
 import { reintentarGemini } from "./reintentarGemini";
+import { modeloGeminiConfigurado } from "../adaptadores/modelo-gemini";
 import {
   buscarFragmentos,
   type ResultadoBusqueda,
@@ -57,7 +58,7 @@ ${fragmento.contenido}
   const cliente = new GoogleGenAI({ apiKey });
 
   const resultado = await reintentarGemini(() => cliente.models.generateContent({
-    model: MODELO_GENERATIVO,
+    model: modeloGeminiConfigurado(),
     contents: `
 PREGUNTA DEL USUARIO:
 ${pregunta}
