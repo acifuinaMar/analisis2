@@ -35,7 +35,17 @@ export class CalculoFrances implements EstrategiaCalculo {
 
         // La fecha entra como dato del credito. El nucleo nunca lee
         // el reloj del sistema (criterio de aceptacion del E4).
-        let fecha = new Date(credito.fechaDesembolso);
+        //
+        // La PRIMERA cuota vence un mes DESPUES del desembolso, no el
+        // mismo dia: en una amortizacion francesa el primer pago cierra
+        // el primer periodo de devengo, y un credito entregado hoy no
+        // tiene cuota exigible hoy.
+        //
+        // El paquete canonico del Proyecto Final lo confirma: de sus 228
+        // pagos, 200 caen exactamente en desembolso + k meses con k >= 1,
+        // y ninguno en la fecha del desembolso. Los pagos puntuales traen
+        // el monto exacto de la cuota, sin un centavo de mora.
+        let fecha = addMonths(credito.fechaDesembolso, 1);
 
         for (let numero = 1; numero <= plazo; numero++) {
 

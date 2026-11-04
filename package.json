@@ -7,9 +7,20 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "node --env-file=.env ./node_modules/vitest/vitest.mjs run",
+    "tipos": "tsc --noEmit",
     "demo": "tsx src/demo.ts",
-    "contratos:openapi": "tsx src/contratos/generar-openapi.ts"
+    "contratos:openapi": "tsx src/contratos/generar-openapi.ts",
+    "db:probar": "node --env-file=.env --import tsx src/rag/probarConexionBD.ts",
+    "rag:buscar": "node --env-file=.env --import tsx src/rag/probarBusqueda.ts",
+    "rag:responder": "node --env-file=.env --import tsx src/rag/probarRespuesta.ts",
+    "cargar": "node --env-file=.env --import tsx src/persistencia/cargar.ts",
+    "api": "node --env-file=.env --import tsx src/api/iniciar.ts",
+    "mcp:servidor": "node --env-file=.env --import tsx src/mcp/servidor.ts",
+    "chat": "node --env-file=.env --import tsx src/asistente/chat.ts",
+    "chat:diagnostico": "node --env-file=.env --import tsx src/asistente/diagnosticar-gemini.ts",
+    "evals:asistente": "node --env-file=.env --import tsx src/asistente/evaluar.ts",
+    "rag:indexar": "node --env-file=.env --import tsx src/rag/indexarCorpus.ts"
   },
   "repository": {
     "type": "git",
@@ -23,16 +34,23 @@
   "homepage": "https://github.com/acifuinaMar/analisis2#readme",
   "devDependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",
+    "@electric-sql/pglite": "^0.5.11",
+    "@types/express": "^5.0.6",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.4.0",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.23.12",
     "typescript": "^5.9.2",
     "vitest": "^4.1.11"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.4",
+    "@google/genai": "^2.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "date-fns": "^4.4.0",
+    "express": "^5.3.0",
     "js-yaml": "^4.3.2",
+    "pg": "^8.23.1",
     "zod": "^3.25.76"
   }
 }

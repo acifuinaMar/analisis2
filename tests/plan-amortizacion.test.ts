@@ -168,12 +168,16 @@ describe("El nucleo no lee la fecha del sistema (aceptacion E4)", () => {
             .toEqual(fechas(generarPlanDeReferencia()));
     });
 
-    it("La fecha de la primera cuota es la de desembolso, no la de hoy", () => {
+    it("La primera cuota vence un mes despues del desembolso", () => {
 
+        // Desembolso: 15 de enero de 2026. La cuota 1 cierra el primer
+        // periodo de devengo, asi que vence el 15 de FEBRERO. Sale del
+        // dato del credito y no del reloj: el plan es el mismo hoy que
+        // dentro de un año (aceptacion E4).
         const primera = generarPlanDeReferencia()[0];
 
         expect(primera.fechaVencimiento.getFullYear()).toBe(2026);
-        expect(primera.fechaVencimiento.getMonth()).toBe(0);
+        expect(primera.fechaVencimiento.getMonth()).toBe(1);
         expect(primera.fechaVencimiento.getDate()).toBe(15);
     });
 
@@ -191,8 +195,9 @@ describe("El nucleo no lee la fecha del sistema (aceptacion E4)", () => {
         const cuotas = new PlanAmortizacion(credito, new CalculoFrances())
             .generarPlan();
 
+        // Desembolso en junio de 2027 -> la cuota 1 vence en julio.
         expect(cuotas[0].fechaVencimiento.getFullYear()).toBe(2027);
-        expect(cuotas[0].fechaVencimiento.getMonth()).toBe(5);
+        expect(cuotas[0].fechaVencimiento.getMonth()).toBe(6);
     });
 
     it("Sumar un mes al 31 de enero da 28 de febrero, no 3 de marzo", () => {
@@ -209,7 +214,9 @@ describe("El nucleo no lee la fecha del sistema (aceptacion E4)", () => {
         const cuotas = new PlanAmortizacion(credito, new CalculoFrances())
             .generarPlan();
 
-        expect(cuotas[1].fechaVencimiento.getMonth()).toBe(1);
-        expect(cuotas[1].fechaVencimiento.getDate()).toBe(28);
+        // Desembolso el 31 de enero: la cuota 1 vence el 28 de febrero
+        // porque addMonths respeta el fin de mes, no el 3 de marzo.
+        expect(cuotas[0].fechaVencimiento.getMonth()).toBe(1);
+        expect(cuotas[0].fechaVencimiento.getDate()).toBe(28);
     });
 });

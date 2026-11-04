@@ -1,6 +1,7 @@
 import { Dinero } from "../dinero";
 import {
     BaseConteoMora,
+    DesgloseMora,
     PoliticaMora,
     aplicarTope,
     validarDiasAtraso
@@ -60,6 +61,56 @@ export class PoliticaMoraRetroactiva implements PoliticaMora {
         );
 
         return aplicarTope(moratorio, capitalEnMora);
+    }
+
+    /**
+     * Una sola linea: aplica la tasa del tramo actual a todos los dias,
+     * que es precisamente lo que la hace distinta de la escalonada.
+     */
+    public explicar(
+        capitalEnMora: Dinero,
+        diasAtraso: number
+    ): DesgloseMora {
+
+        validarDiasAtraso(diasAtraso);
+
+        const total = this.calcular(capitalEnMora, diasAtraso);
+
+        if (diasAtraso === 0) {
+            return {
+                versionPolitica: this.version,
+                capitalEnMora,
+                diasAtraso,
+                lineas: [],
+                sumaSinRedondear: 0,
+                total
+            };
+        }
+
+        const tramo = this.tramoDe(diasAtraso);
+        const tasaDiaria = tramo.tnaMoratoria / this.baseConteo;
+
+        const dias = Math.min(
+            diasAtraso,
+            this.tramos[this.tramos.length - 1].hasta
+        );
+
+        const monto = capitalEnMora.obtenerValor() * tasaDiaria * dias;
+
+        return {
+            versionPolitica: this.version,
+            capitalEnMora,
+            diasAtraso,
+            lineas: [{
+                tramo: tramo.tramo,
+                diasEnTramo: dias,
+                tnaMoratoria: tramo.tnaMoratoria,
+                tasaDiaria,
+                montoSinRedondear: monto
+            }],
+            sumaSinRedondear: monto,
+            total
+        };
     }
 
     /** El tramo en que cae el atraso; mas alla del ultimo, el ultimo. */

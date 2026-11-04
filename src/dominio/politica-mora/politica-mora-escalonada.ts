@@ -2,6 +2,8 @@ import { Dinero } from "../dinero";
 import { TramoMora } from "../tramo-mora";
 import {
     BaseConteoMora,
+    DesgloseMora,
+    LineaDesgloseMora,
     PoliticaMora,
     aplicarTope,
     validarDiasAtraso
@@ -114,6 +116,56 @@ export class PoliticaMoraEscalonada implements PoliticaMora {
         );
 
         return aplicarTope(moratorio, capitalEnMora);
+    }
+
+    /**
+     * Desglose por TRAMOS RECORRIDOS (P2 7.3).
+     *
+     * Devuelve una linea por cada tramo que la cuota atraveso, con sus
+     * dias y su tasa. Los montos van sin redondear: la suma de las lineas
+     * redondeadas puede diferir un centavo del total, y la pantalla debe
+     * poder explicarlo en vez de disimularlo.
+     */
+    public explicar(
+        capitalEnMora: Dinero,
+        diasAtraso: number
+    ): DesgloseMora {
+
+        validarDiasAtraso(diasAtraso);
+
+        const lineas: LineaDesgloseMora[] = [];
+        let suma = 0;
+
+        for (const tramo of this.tramos) {
+
+            const dias = this.diasEnTramo(diasAtraso, tramo);
+
+            if (dias === 0) {
+                continue;
+            }
+
+            const tasaDiaria = this.tasaDiaria(tramo);
+            const monto = capitalEnMora.obtenerValor() * tasaDiaria * dias;
+
+            suma += monto;
+
+            lineas.push({
+                tramo: tramo.tramo,
+                diasEnTramo: dias,
+                tnaMoratoria: tramo.tnaMoratoria,
+                tasaDiaria,
+                montoSinRedondear: monto
+            });
+        }
+
+        return {
+            versionPolitica: this.version,
+            capitalEnMora,
+            diasAtraso,
+            lineas,
+            sumaSinRedondear: suma,
+            total: this.calcular(capitalEnMora, diasAtraso)
+        };
     }
 
     /**

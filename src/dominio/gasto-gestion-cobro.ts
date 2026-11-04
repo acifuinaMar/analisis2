@@ -23,24 +23,61 @@ import { Dinero } from "./dinero";
  * saldo del credito (regla de mayor, P1 6.9). Asi el cierre se puede
  * reconstruir y auditar despues.
  */
+/**
+ * Parametros del gasto, tomados de politicas.json.
+ *
+ * Son DATOS, no constantes de codigo (P1 6.3.1, P2 7.2). El paquete
+ * canonico los entrega en `gasto_gestion_cobro`, incluida la lista de
+ * politicas a las que aplica.
+ */
+export interface ParametrosGastoGestion {
+
+    readonly montoPorCuota: Dinero;
+
+    /** Dia de atraso en que se genera la visita. */
+    readonly diaDeGeneracion: number;
+
+    /**
+     * Versiones de politica moratoria a las que aplica el gasto.
+     *
+     * El enunciado del P2 (7.5) no aclara si el gasto alcanza a los
+     * creditos con politica plana. El paquete canonico lo resuelve y lo
+     * documenta: solo POL-2026-10 (decision RP-08). Se modela como dato
+     * para que el nucleo no tenga que elegir por su cuenta.
+     */
+    readonly politicasAplicables: ReadonlySet<string>;
+
+}
+
+/** Los del paquete canonico: Q25.00 al dia 31, solo politica escalonada. */
+export const PARAMETROS_CANONICOS: ParametrosGastoGestion = {
+    montoPorCuota: Dinero.desde(25.00),
+    diaDeGeneracion: 31,
+    politicasAplicables: new Set(["POL-2026-10"])
+};
+
 export class GastoGestionCobro {
-
-    /** Monto fijo por cuota vencida (politica institucional). */
-    private static readonly MONTO_POR_CUOTA = 25.00;
-
-    /** Dia en que la cuota entra a Mora 2 y se genera la visita. */
-    private static readonly DIA_DE_GENERACION = 31;
 
     private readonly generados = new Map<string, Dinero>();
 
     private readonly abonados = new Map<string, Dinero>();
 
-    public static montoPorCuota(): Dinero {
-        return Dinero.desde(GastoGestionCobro.MONTO_POR_CUOTA);
+    constructor(
+        private readonly parametros: ParametrosGastoGestion =
+            PARAMETROS_CANONICOS
+    ) {}
+
+    public montoPorCuota(): Dinero {
+        return this.parametros.montoPorCuota;
     }
 
-    public static diaDeGeneracion(): number {
-        return GastoGestionCobro.DIA_DE_GENERACION;
+    public diaDeGeneracion(): number {
+        return this.parametros.diaDeGeneracion;
+    }
+
+    /** Si el gasto alcanza o no a los creditos de esta politica. */
+    public aplicaA(versionPolitica: string): boolean {
+        return this.parametros.politicasAplicables.has(versionPolitica);
     }
 
     /**
@@ -50,10 +87,14 @@ export class GastoGestionCobro {
      * genera el gasto una sola vez. Devuelve lo que se genero en ESTA
      * llamada (cero si no procedia o si ya existia), para que el cierre
      * pueda reportar el movimiento del periodo.
+     *
+     * Solo procede si la politica del credito esta entre las aplicables:
+     * un credito con politica plana no genera gasto de gestion.
      */
     public evaluarAlCorte(
         claveCuota: string,
-        diasAtraso: number
+        diasAtraso: number,
+        versionPolitica: string
     ): Dinero {
 
         if (!Number.isInteger(diasAtraso) || diasAtraso < 0) {
@@ -62,7 +103,11 @@ export class GastoGestionCobro {
             );
         }
 
-        if (diasAtraso < GastoGestionCobro.DIA_DE_GENERACION) {
+        if (!this.aplicaA(versionPolitica)) {
+            return Dinero.cero();
+        }
+
+        if (diasAtraso < this.parametros.diaDeGeneracion) {
             return Dinero.cero();
         }
 
@@ -70,7 +115,7 @@ export class GastoGestionCobro {
             return Dinero.cero();
         }
 
-        const monto = GastoGestionCobro.montoPorCuota();
+        const monto = this.parametros.montoPorCuota;
 
         this.generados.set(claveCuota, monto);
 

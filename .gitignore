@@ -26,7 +26,8 @@ pnpm-debug.log*
 # Variables de entorno
 # ==========================
 .env
-.env.local
+.env.*
+!.env.example
 
 # ==========================
 # Archivos del sistema
@@ -43,3 +44,15 @@ Thumbs.db
 # Caché de TypeScript
 # ==========================
 *.tsbuildinfo
+# Reportes generados durante evaluaciones RAG
+/reportes/rag/
+# Informes de la evaluacion del asistente
+/reportes/asistente/
+# ==========================
+# Base de datos local (PGlite)
+# ==========================
+.cv-db/
+
+# Resultados de Playwright
+test-results/
+playwright-report/

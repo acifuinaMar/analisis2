@@ -5,7 +5,10 @@ import { Dinero } from "../src/dominio/dinero";
 import { NombreEstado } from "../src/dominio/nombre-estado";
 import { PoliticaCredito, BaseConteo } from "../src/dominio/politica-credito";
 import { ClasificadorTramoMora, TramoMora } from "../src/dominio/tramo-mora";
-import { TransicionInvalida } from "../src/dominio/estados/estado-credito";
+import {
+    TransicionInvalida,
+    type EstadoCredito
+} from "../src/dominio/estados/estado-credito";
 import {
     Solicitado, Aprobado, Vigente, EnMora, Reestructurado,
     Cancelado, Incobrable
@@ -18,7 +21,9 @@ const POLITICA = new PoliticaCredito(
 
 const clasificador = new ClasificadorTramoMora();
 
-function credito(estadoInicial = new Vigente()): Credito {
+function credito(
+    estadoInicial: EstadoCredito = new Vigente()
+): Credito {
     return new Credito(
         "CR-001",
         Dinero.desde(10000),
