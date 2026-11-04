@@ -17,8 +17,14 @@ import { CobroCredito } from "../servicios/cobro-credito";
 import { ConsultasCartera } from "../servicios/consultas-cartera";
 import { DirectorioClientes } from "../servicios/directorio-clientes";
 import { OriginacionCredito } from "../servicios/originacion-credito";
+import { puedeRegistrarPagos, type Perfil } from "../acceso/perfil";
+import {
+    ErrorPerfilSinPermiso,
+    type RespuestaChat
+} from "../asistente/orquestador";
 import { aCuerpoError, ErrorHttp } from "./errores";
 import { exigirPerfil } from "./perfiles";
+import { type FabricaChat, SesionesChat } from "./sesiones-chat";
 
 /**
  * API REST (E1, parte servidor).
@@ -45,6 +51,18 @@ export interface OpcionesApp {
     readonly repositorio: RepositorioCartera;
     /** Para registrar errores 500. Por defecto, la consola. */
     readonly registrarError?: (error: unknown) => void;
+    /**
+     * Como se arma un orquestador del chat (E5). Se INYECTA, igual que
+     * el repositorio, por dos razones concretas:
+     *
+     * - La API se prueba sin clave de API y sin red. Las pruebas pasan
+     *   una fabrica con un modelo guionizado y ejercitan las rutas del
+     *   chat de forma determinista.
+     * - Sin fabrica, la API funciona igual y solo las rutas del chat
+     *   responden 503. El nucleo, el tablero y los pagos no dependen
+     *   de que haya un modelo de lenguaje disponible.
+     */
+    readonly crearChat?: FabricaChat;
 }
 
 const IdClienteEsquema = z.string().regex(
@@ -89,6 +107,23 @@ const ClienteEsquema = z.object({
 const PagoCuerpoEsquema = RegistrarPagoEntrada.omit({ idCredito: true }).strict();
 
 const FechaCorteQuery = z.object({ fechaCorte: FechaCorteEsquema });
+
+/**
+ * El cuerpo del chat.
+ *
+ * `idSesion` es opcional: sin el se abre una conversacion nueva, con el
+ * se continua la que ya existe. Asi el navegador no necesita un paso
+ * previo de "abrir sesion" y la primera pregunta ya responde.
+ */
+const PreguntaChatEsquema = z.object({
+    pregunta: z.string().trim().min(1, "Escriba una pregunta.").max(2000),
+    idSesion: z.string().uuid().optional()
+}).strict();
+
+const SesionChatEsquema = z.object({
+    idSesion: z.string().uuid(),
+    motivo: z.string().trim().max(500).optional()
+}).strict();
 
 /** Texto de busqueda de clientes: nombre, CL-NNNN, DPI o CV-AAAA-NNNN. */
 const BusquedaClientesQuery = z.object({
@@ -339,6 +374,136 @@ export function crearApp(opciones: OpcionesApp): Express {
     });
 
     // ------------------------------------------------------------------
+    // Chat gerencial (E5) · G-1 a G-8
+    // ------------------------------------------------------------------
+    //
+    // El chat vive DENTRO de esta misma aplicacion, como pide el E5, y
+    // no en una ventana aparte ni en una terminal. Estas rutas son la
+    // unica forma que tiene la interfaz de hablar con el orquestador.
+    //
+    // La memoria de la sesion la sostiene SesionesChat, porque HTTP no
+    // recuerda nada entre peticiones y el enunciado exige que las
+    // preguntas encadenadas tengan contexto.
+
+    const sesiones = opciones.crearChat
+        ? new SesionesChat(opciones.crearChat)
+        : undefined;
+
+    /** El perfil ya lo valido exigirPerfil; aqui solo se lee. */
+    const perfilDe = (req: Request): Perfil =>
+        req.header("X-Perfil") as Perfil;
+
+    function registroDeSesiones(): SesionesChat {
+
+        if (!sesiones) {
+            throw new ErrorHttp(
+                503, "CHAT_NO_DISPONIBLE",
+                "El asistente no esta disponible: al servidor no se le "
+                + "configuro un modelo de lenguaje. Revise GEMINI_API_KEY."
+            );
+        }
+
+        return sesiones;
+    }
+
+    /**
+     * Pasa la respuesta del orquestador a JSON.
+     *
+     * Se agrega `puedeAprobar` para que la interfaz sepa si pintar el
+     * boton de aprobar. Es informativo y no es el control: el control
+     * son el perfil de la ruta y la verificacion del orquestador, que
+     * niegan la aprobacion aunque alguien llame la ruta a mano. Ocultar
+     * un boton no es un control de acceso.
+     */
+    const aJson = (
+        idSesion: string,
+        perfil: Perfil,
+        r: RespuestaChat
+    ) => r.tipo === "respuesta"
+        ? {
+            idSesion,
+            tipo: r.tipo,
+            texto: r.texto,
+            herramientasUsadas: r.herramientasUsadas
+        }
+        : {
+            idSesion,
+            tipo: r.tipo,
+            propuesta: r.propuesta,
+            herramientasUsadas: r.herramientasUsadas,
+            puedeAprobar: puedeRegistrarPagos(perfil)
+        };
+
+    app.post("/api/chat", ambos, async (req, res) => {
+
+        const registro = registroDeSesiones();
+        const perfil = perfilDe(req);
+        const d = validar(PreguntaChatEsquema, req.body);
+
+        const { idSesion, chat } = d.idSesion === undefined
+            ? await registro.abrir(perfil)
+            : { idSesion: d.idSesion, chat: registro.obtener(d.idSesion, perfil) };
+
+        res.json(aJson(idSesion, perfil, await chat.preguntar(d.pregunta)));
+    });
+
+    /**
+     * Aprobar el pago que el asistente propuso.
+     *
+     * Reservada al ASESOR, igual que POST /api/creditos/:id/pagos: es
+     * la misma accion y no puede tener dos reglas segun por donde se
+     * pida. Si el chat la permitiera a gerencia, seria la puerta de
+     * atras de los permisos de esta misma API.
+     *
+     * La gerencia si ve la vista previa con el desglose —eso es lectura
+     * y no mueve nada—; lo que no puede es aplicarlo.
+     */
+    app.post("/api/chat/aprobar", soloAsesor, async (req, res) => {
+
+        const registro = registroDeSesiones();
+        const perfil = perfilDe(req);
+        const d = validar(SesionChatEsquema, req.body);
+        const chat = registro.obtener(d.idSesion, perfil);
+
+        if (!chat.pagoPendiente()) {
+            throw new ErrorHttp(
+                409, "SIN_PAGO_PENDIENTE",
+                "No hay ningun pago esperando aprobacion en esta "
+                + "conversacion."
+            );
+        }
+
+        res.json(aJson(d.idSesion, perfil, await chat.aprobarPago()));
+    });
+
+    /** Rechazar la propuesta. Cualquiera puede decir que no. */
+    app.post("/api/chat/rechazar", ambos, async (req, res) => {
+
+        const registro = registroDeSesiones();
+        const perfil = perfilDe(req);
+        const d = validar(SesionChatEsquema, req.body);
+        const chat = registro.obtener(d.idSesion, perfil);
+
+        if (!chat.pagoPendiente()) {
+            throw new ErrorHttp(
+                409, "SIN_PAGO_PENDIENTE",
+                "No hay ningun pago esperando aprobacion en esta "
+                + "conversacion."
+            );
+        }
+
+        res.json(aJson(d.idSesion, perfil, await chat.rechazarPago(d.motivo)));
+    });
+
+    /** Cerrar la conversacion. Idempotente: siempre 204. */
+    app.delete("/api/chat/:idSesion", ambos, (req, res) => {
+
+        registroDeSesiones().cerrar(String(req.params.idSesion), perfilDe(req));
+
+        res.status(204).end();
+    });
+
+    // ------------------------------------------------------------------
     // Rutas desconocidas y manejo uniforme de errores
     // ------------------------------------------------------------------
 
@@ -351,7 +516,14 @@ export function crearApp(opciones: OpcionesApp): Express {
 
     app.use((error: unknown, _req: Request, res: Response, _siguiente: NextFunction) => {
 
-        const { estado, cuerpo } = aCuerpoError(error);
+        // La negativa por perfil del orquestador es el mismo 403 que da
+        // exigirPerfil. Se traduce aqui para que el chat y el resto de
+        // la API hablen con un solo vocabulario de errores.
+        const traducido = error instanceof ErrorPerfilSinPermiso
+            ? new ErrorHttp(403, "PERFIL_SIN_PERMISO", error.message)
+            : error;
+
+        const { estado, cuerpo } = aCuerpoError(traducido);
 
         if (estado >= 500) {
             (opciones.registrarError ?? console.error)(error);
