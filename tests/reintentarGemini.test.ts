@@ -166,3 +166,119 @@ describe("Formas del error de Gemini", () => {
     expect(_esErrorTemporalGemini("texto")).toBe(false);
   });
 });
+
+
+/**
+ * La espera la decide el servidor cuando la dice.
+ *
+ * Lo destapo el ensayo del video: la cuota POR MINUTO de Gemini pide
+ * unos 45 segundos, y los cinco intentos con espera creciente sumaban
+ * 30, asi que se rendia justo antes de que la ventana se liberara. La
+ * espera creciente es una suposicion nuestra; el retryDelay es el dato.
+ */
+describe("Cuanto se espera entre reintentos", () => {
+
+  function errorCon(retryDelay: string, code = 429) {
+    return {
+      message: JSON.stringify({
+        error: {
+          code,
+          status: "RESOURCE_EXHAUSTED",
+          details: [{
+            "@type": "type.googleapis.com/google.rpc.RetryInfo",
+            retryDelay
+          }]
+        }
+      })
+    };
+  }
+
+  it("Espera lo que el servidor pide, no lo que supone la curva", async () => {
+
+    const esperas: number[] = [];
+    const dormir = globalThis.setTimeout;
+
+    // @ts-expect-error se sustituye el reloj para no esperar de verdad
+    globalThis.setTimeout = (fn: () => void, ms: number) => {
+      esperas.push(ms);
+      return dormir(fn, 0);
+    };
+
+    try {
+      let intentos = 0;
+      await reintentarGemini(
+        async () => {
+          intentos++;
+          if (intentos < 2) throw errorCon("45s");
+          return "listo";
+        },
+        {
+          maxIntentos: 3,
+          esperaInicialMs: 2000,
+          esReintentable: () => true
+        }
+      );
+    } finally {
+      globalThis.setTimeout = dormir;
+    }
+
+    // 45 s del servidor mas un segundo de margen, no los 2 s de la curva.
+    expect(esperas[0]).toBe(46_000);
+  });
+
+  it("Una espera desmedida se recorta al tope", async () => {
+
+    const esperas: number[] = [];
+    const dormir = globalThis.setTimeout;
+
+    // @ts-expect-error se sustituye el reloj para no esperar de verdad
+    globalThis.setTimeout = (fn: () => void, ms: number) => {
+      esperas.push(ms);
+      return dormir(fn, 0);
+    };
+
+    try {
+      let intentos = 0;
+      await reintentarGemini(
+        async () => {
+          intentos++;
+          if (intentos < 2) throw errorCon("12578s");
+          return "listo";
+        },
+        { maxIntentos: 3, esReintentable: () => true }
+      );
+    } finally {
+      globalThis.setTimeout = dormir;
+    }
+
+    expect(esperas[0]).toBe(120_000);
+  });
+
+  it("Sin retryDelay se usa la espera creciente de siempre", async () => {
+
+    const esperas: number[] = [];
+    const dormir = globalThis.setTimeout;
+
+    // @ts-expect-error se sustituye el reloj para no esperar de verdad
+    globalThis.setTimeout = (fn: () => void, ms: number) => {
+      esperas.push(ms);
+      return dormir(fn, 0);
+    };
+
+    try {
+      let intentos = 0;
+      await reintentarGemini(
+        async () => {
+          intentos++;
+          if (intentos < 2) throw { code: 503 };
+          return "listo";
+        },
+        { maxIntentos: 3, esperaInicialMs: 2000 }
+      );
+    } finally {
+      globalThis.setTimeout = dormir;
+    }
+
+    expect(esperas[0]).toBe(2000);
+  });
+});

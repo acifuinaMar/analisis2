@@ -1,5 +1,14 @@
 import { detalleErrorGemini } from "./detalleErrorGemini";
 
+/**
+ * Tope de una espera, aunque el servidor pida mas.
+ *
+ * Dos minutos: alcanza de sobra para una cuota POR MINUTO, que es la
+ * que se libera sola, y evita quedarse dormido tres horas esperando una
+ * cuota por dia, que no.
+ */
+const TOPE_ESPERA_MS = 120_000;
+
 export interface OpcionesReintento {
   maxIntentos?: number;
   esperaInicialMs?: number;
@@ -58,7 +67,19 @@ export async function reintentarGemini<T>(
         throw error;
       }
 
-      const esperaMs = esperaInicialMs * 2 ** (intento - 1);
+      // Si el error dice CUANTO esperar, se le hace caso.
+      //
+      // La espera creciente es una suposicion nuestra; el retryDelay es
+      // el dato del servidor. Y la suposicion se quedaba corta: la
+      // cuota por minuto pide unos 45 segundos y los cinco intentos
+      // sumaban 30, asi que se rendia justo antes de que la ventana se
+      // liberara. Se agrega un segundo de margen para no reintentar un
+      // pelo antes de tiempo.
+      const sugeridos = detalleErrorGemini(error).esperaSugeridaSegundos;
+
+      const esperaMs = sugeridos === undefined
+        ? esperaInicialMs * 2 ** (intento - 1)
+        : Math.min(sugeridos * 1000 + 1000, TOPE_ESPERA_MS);
 
       console.warn(
         `Gemini devolvió un error pasajero. ` +
