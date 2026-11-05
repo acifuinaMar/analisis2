@@ -48,8 +48,11 @@ export function esErrorCuotaPasajera(error: unknown): boolean {
 
   const { esperaSugeridaSegundos } = detalleErrorGemini(error);
 
+  // Sin espera sugerida NO se reintenta. La espera corta la tiene que
+  // afirmar el servidor: ante la duda, la cuota se trata como la que no
+  // se arregla esperando, que es la decision prudente.
   return (
-    esperaSugeridaSegundos === undefined ||
+    esperaSugeridaSegundos !== undefined &&
     esperaSugeridaSegundos <= ESPERA_MAXIMA_RAZONABLE_SEGUNDOS
   );
 }

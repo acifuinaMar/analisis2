@@ -252,6 +252,41 @@ describe("Adaptador Gemini - lo que no se arregla esperando no se reintenta", ()
         expect(recibidas).toHaveLength(1);
     });
 
+    /**
+     * La cuota POR MINUTO si se espera.
+     *
+     * Son quince peticiones por minuto y se libera en segundos. La que
+     * topa en una conversacion encadenada es esta, no la diaria: ocho
+     * consultas con herramientas pasan de quince en un minuto sin
+     * esfuerzo. El servidor manda su retryDelay y esperarlo es lo
+     * correcto; lo descubrio el ensayo del video, donde seis casos
+     * murieron por una cuota que se iba a liberar sola.
+     */
+    it("429 con retryDelay corto: se espera y se reintenta", async () => {
+        guion = [
+            {
+                estado: 429,
+                cuerpo: {
+                    error: {
+                        code: 429,
+                        status: "RESOURCE_EXHAUSTED",
+                        message: "Quota exceeded",
+                        details: [{
+                            "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                            retryDelay: "1s"
+                        }]
+                    }
+                }
+            },
+            OK
+        ];
+
+        const turno = await modelo().responder("instrucciones", PREGUNTA, CATALOGO);
+
+        expect(turno).toEqual({ tipo: "texto", texto: "Hay 66 creditos." });
+        expect(recibidas).toHaveLength(2);
+    });
+
     it("429: cuota agotada, un solo intento", async () => {
         guion = [error(429, "RESOURCE_EXHAUSTED", "Quota exceeded")];
         const e = await fallaCon(modelo().responder("instrucciones", PREGUNTA, CATALOGO));
