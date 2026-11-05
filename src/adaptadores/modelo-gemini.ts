@@ -376,13 +376,18 @@ export class ModeloGemini implements ModeloLenguaje {
         // Limite local de esta respuesta + cancelacion de la sesion. Ninguna
         // de las dos viaja al servidor. Con la senal abortada, el SDK deja
         // de reintentar.
-        const senales = [AbortSignal.timeout(this.limiteMs)];
-        if (this.senal) {
-            senales.push(this.senal);
-        }
+        //
+        // El limite se arma DENTRO de cada intento para que cada uno tenga
+        // su propio presupuesto de respuesta: si lo compartieran, una
+        // espera por cuota se comeria el tiempo del intento siguiente.
+        const intentar = () => {
 
-        try {
-            const respuesta = await this.cliente.models.generateContent({
+            const senales = [AbortSignal.timeout(this.limiteMs)];
+            if (this.senal) {
+                senales.push(this.senal);
+            }
+
+            return this.cliente.models.generateContent({
                 model: this.modelo,
                 contents: aContenidos(historial),
                 config: {
@@ -391,6 +396,20 @@ export class ModeloGemini implements ModeloLenguaje {
                     tools: [{ functionDeclarations: aDeclaraciones(herramientas) }],
                     abortSignal: AbortSignal.any(senales)
                 }
+            });
+        };
+
+        try {
+            // El SDK ya reintenta las fallas temporales del servidor
+            // (REINTENTOS_GEMINI). Lo que NO reintenta es el 429, y con
+            // razon cuando la cuota es la diaria. Pero la que topa en una
+            // conversacion encadenada es la de QUINCE POR MINUTO, que se
+            // libera en segundos: el servidor manda su retryDelay y
+            // esperarlo es justo lo correcto. esErrorCuotaPasajera exige
+            // que esa espera corta venga afirmada por el servidor.
+            const respuesta = await reintentarGemini(intentar, {
+                maxIntentos: 3,
+                esReintentable: esErrorCuotaPasajera
             });
 
             return aTurno(respuesta);
